@@ -34,6 +34,7 @@ add_library(coil_core
 
 target_include_directories(coil_core
   PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 

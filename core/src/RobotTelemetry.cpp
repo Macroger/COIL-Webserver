@@ -4,7 +4,7 @@
 
 namespace coil::protocol
 {
-	RobotTelemetry RobotTelemetry::Deserialize(const unsigned char* data, size_t length)
+	RobotTelemetry RobotTelemetry::Deserialize(const unsigned char* data, std::size_t length)
 	{
 		if (length < 11) {
 			throw std::invalid_argument("Telemetry data too short - expected at least 13 bytes");

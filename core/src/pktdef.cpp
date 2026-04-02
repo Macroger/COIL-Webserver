@@ -2,9 +2,11 @@
 #include <cstring> 
 #include <string>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
+#include <cerrno>
 using namespace coil::protocol::constants;
 namespace coil::protocol
 {
@@ -30,8 +32,7 @@ namespace coil::protocol
 		if (bufferSize < MIN_PKT_SIZE)throw std::invalid_argument("Buffer too small for valid packet");
 		if (rawData == nullptr) throw std::invalid_argument("rawData cannot be null");
 
-		// Variable to hold the result of memcpy_s operations
-		errno_t result;
+		// No result variable needed for memcpy
 
 		// Initialize rawBuffer to nullptr as it isn't used until serializing a packet for transmission
 		rawBuffer = nullptr;
@@ -64,18 +65,7 @@ namespace coil::protocol
 		}
 
 		// CRC passed - now deserialize the header
-		result = memcpy_s(&pktHeader, HEADER_SIZE, rawData, HEADER_SIZE);
-
-		// If the result is non-zero, it indicates a failure in copying the header data.
-		if (result != 0)
-		{
-			char errorBuffer[256];
-			strerror_s(errorBuffer, sizeof(errorBuffer), result);
-			std::string errorMsg = "Failed to copy header data. Error: "
-				+ std::string(errorBuffer)
-				+ " (code: " + std::to_string(result) + ")";
-			throw std::runtime_error(errorMsg);
-		}
+		   memcpy(&pktHeader, rawData, HEADER_SIZE);
 
 		/* 
 			Validate buffer has enough space for claimed body length - if not this would indicate a malformed packet
@@ -113,20 +103,7 @@ namespace coil::protocol
 			const char* pktBodyPtr = rawData + HEADER_SIZE;
 
 			// Copy the data into the packet body - provide bodyLength to ensure no overrun can occur
-			result = memcpy_s(
-				pktBody,
-				packetBodyLength,
-				pktBodyPtr,
-				packetBodyLength);
-			
-			// Check if an error occurred
-			if (result != 0)
-			{
-				// Free any memory allocated for the body to prevent leaks before throwing the exception
-				delete[] pktBody;
-				pktBody = nullptr;
-				throw std::runtime_error("Failed to copy body data.");
-			}
+			   memcpy(pktBody, pktBodyPtr, packetBodyLength);
 		}
 		else
 		{
@@ -224,21 +201,7 @@ namespace coil::protocol
 		pktBody = new char[size];
 
 		// Move the data into the location pointed to by pktBody pointer - provide size to ensure no overrun can occur
-		errno_t result = memcpy_s(pktBody, size, data, size);
-
-		// If the result is non-zero, it indicates a failure in copying the header data.
-		if (result != 0)
-		{
-			delete[] pktBody; // Free any memory allocated for the body to prevent leaks before throwing the exception
-			pktBody = nullptr;
-			pktHeader.packetLength = MIN_PKT_SIZE;
-			char errorBuffer[256];
-			strerror_s(errorBuffer, sizeof(errorBuffer), result);
-			std::string errorMsg = "Failed to copy body data. Error: "
-				+ std::string(errorBuffer)
-				+ " (code: " + std::to_string(result) + ")";
-			throw std::runtime_error(errorMsg);
-		}
+		   memcpy(pktBody, data, size);
 
 		// packetLength = Header(4) + Body(N) + CRC(1)
 		pktHeader.packetLength = static_cast<uint8_t>(size + MIN_PKT_SIZE);
@@ -347,7 +310,7 @@ namespace coil::protocol
 
 		//1. Count bits in entire 4-byte Header (includes PktCount, Flags, Padding and length)
 		const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(&pktHeader);
-		for (size_t i = 0; i < constants::HEADER_SIZE; i++)
+		for (std::size_t i = 0; i < constants::HEADER_SIZE; i++)
 		{
 			bitCount += std::popcount(headerPtr[i]);
 		}
@@ -384,7 +347,7 @@ namespace coil::protocol
 	const char* PktDef::GenPacket()
 	{
 		// An error result of 0 indicates success for memcpy_s, any non-zero value indicates a failure.
-		errno_t result;
+		// No result variable needed for memcpy
 
 		// Free the previous rawBuffer if it exists to prevent memory leaks before allocating a new buffer
 		delete[] rawBuffer;
@@ -405,18 +368,7 @@ namespace coil::protocol
 		char* writePtr = rawBuffer; 
 
 		// Copy the header into the buffer - provide packet size to ensure no overrun can occur.
-		result = memcpy_s(writePtr, actualPacketLength, &headerCopy, HEADER_SIZE);
-
-		//If the result is non-zero, indicates a failure in copying the header data
-		if (result != 0)
-		{
-			char errorBuffer[256];
-			strerror_s(errorBuffer, sizeof(errorBuffer), result);
-			std::string errorMsg = "Failed to copy header data. Error: "
-				+ std::string(errorBuffer)
-				+ " (code: " + std::to_string(result) + ")";
-			throw std::runtime_error(errorMsg);
-		}
+		   memcpy(writePtr, &headerCopy, HEADER_SIZE);
 
 		// Move pointer past header
 		writePtr += HEADER_SIZE; 
@@ -425,16 +377,7 @@ namespace coil::protocol
 		if (pktBody != nullptr && actualPacketLength > MIN_PKT_SIZE)
 		{	
 			uint8_t remainingSize = actualPacketLength - HEADER_SIZE;
-			result = memcpy_s(writePtr, remainingSize, pktBody, packetBodyLength);
-			if (result != 0)
-			{
-				char errorBuffer[256];
-				strerror_s(errorBuffer, sizeof(errorBuffer), result);
-				std::string errorMsg = "Failed to copy body data. Error: "
-					+ std::string(errorBuffer)
-					+ " (code: " + std::to_string(result) + ")";
-				throw std::runtime_error(errorMsg);
-			}
+			   memcpy(writePtr, pktBody, packetBodyLength);
 
 			// Advance the pointer past the body
 			writePtr += packetBodyLength;

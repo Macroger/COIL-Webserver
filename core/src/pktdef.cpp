@@ -2,11 +2,9 @@
 #include <cstring> 
 #include <string>
 #include <bit>
-#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
-#include <cerrno>
 using namespace coil::protocol::constants;
 namespace coil::protocol
 {
@@ -32,7 +30,7 @@ namespace coil::protocol
 		if (bufferSize < MIN_PKT_SIZE)throw std::invalid_argument("Buffer too small for valid packet");
 		if (rawData == nullptr) throw std::invalid_argument("rawData cannot be null");
 
-		// No result variable needed for memcpy
+		// No-secure memcpy used on POSIX; sizes are validated above
 
 		// Initialize rawBuffer to nullptr as it isn't used until serializing a packet for transmission
 		rawBuffer = nullptr;
@@ -65,7 +63,8 @@ namespace coil::protocol
 		}
 
 		// CRC passed - now deserialize the header
-		   memcpy(&pktHeader, rawData, HEADER_SIZE);
+		// Copy header
+		std::memcpy(&pktHeader, rawData, HEADER_SIZE);
 
 		/* 
 			Validate buffer has enough space for claimed body length - if not this would indicate a malformed packet
@@ -81,7 +80,7 @@ namespace coil::protocol
 
 		// Validate the header fields to ensure they represent a valid command.
 		if (!ValidateHeader(pktHeader))
-		{
+		{				
 			// Generate error BEFORE clearing
 			std::string errorMsg = GetHeaderValidationError(pktHeader);
 
@@ -91,7 +90,7 @@ namespace coil::protocol
 			pktCRC = 0;
 
 			// Throw an exception using the GetHeaderValidationError function to provide a detailed error message about why the header is invalid.
-			throw std::runtime_error(errorMsg);
+			throw std::invalid_argument(errorMsg);
 		}
 		
 		// Deserialize body if present - check if the packet is larger than MIN_PKT_SIZE, which would indicate the presence of body data based on the packet structure.
@@ -102,8 +101,8 @@ namespace coil::protocol
 			pktBody = new char[packetBodyLength];
 			const char* pktBodyPtr = rawData + HEADER_SIZE;
 
-			// Copy the data into the packet body - provide bodyLength to ensure no overrun can occur
-			   memcpy(pktBody, pktBodyPtr, packetBodyLength);
+			// Copy the data into the packet body
+			std::memcpy(pktBody, pktBodyPtr, static_cast<size_t>(packetBodyLength));
 		}
 		else
 		{
@@ -164,11 +163,17 @@ namespace coil::protocol
 	/// <param name="">True to set the Ack flag, False to clear it.</param>
 	void PktDef::SetAck(bool newAckValue)
 	{
-		bool ackValue = (pktHeader.ackBit == 1); // Get current ack value
-		if (ackValue != newAckValue) // Only update if the new value is different to avoid unnecessary changes
+		// Requirement: Ack must correspond to a command bit 
+		// Check if any command flags (Drive, Status, Sleep) are currently set to 1
+		bool hasCommand = (pktHeader.driveBit == 1 || pktHeader.statusBit == 1 || pktHeader.sleepBit == 1);
+
+		if (newAckValue && !hasCommand)
 		{
-			pktHeader.ackBit = newAckValue ? 1 : 0; // Set or clear the ack bit based on the new value
+			// If trying to set ACK to true without a command, we reject it
+			return;
 		}
+
+		pktHeader.ackBit = newAckValue ? 1 : 0;
 	}
 
 	/// <summary>
@@ -201,7 +206,7 @@ namespace coil::protocol
 		pktBody = new char[size];
 
 		// Move the data into the location pointed to by pktBody pointer - provide size to ensure no overrun can occur
-		   memcpy(pktBody, data, size);
+		std::memcpy(pktBody, data, static_cast<size_t>(size));
 
 		// packetLength = Header(4) + Body(N) + CRC(1)
 		pktHeader.packetLength = static_cast<uint8_t>(size + MIN_PKT_SIZE);
@@ -310,7 +315,7 @@ namespace coil::protocol
 
 		//1. Count bits in entire 4-byte Header (includes PktCount, Flags, Padding and length)
 		const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(&pktHeader);
-		for (std::size_t i = 0; i < constants::HEADER_SIZE; i++)
+		for (size_t i = 0; i < constants::HEADER_SIZE; i++)
 		{
 			bitCount += std::popcount(headerPtr[i]);
 		}
@@ -347,7 +352,7 @@ namespace coil::protocol
 	const char* PktDef::GenPacket()
 	{
 		// An error result of 0 indicates success for memcpy_s, any non-zero value indicates a failure.
-		// No result variable needed for memcpy
+		int result;
 
 		// Free the previous rawBuffer if it exists to prevent memory leaks before allocating a new buffer
 		delete[] rawBuffer;
@@ -367,8 +372,8 @@ namespace coil::protocol
 		// Pointer to keep track of where we are (which element) in the buffer
 		char* writePtr = rawBuffer; 
 
-		// Copy the header into the buffer - provide packet size to ensure no overrun can occur.
-		   memcpy(writePtr, &headerCopy, HEADER_SIZE);
+		// Copy the header into the buffer
+		std::memcpy(writePtr, &headerCopy, HEADER_SIZE);
 
 		// Move pointer past header
 		writePtr += HEADER_SIZE; 
@@ -377,7 +382,7 @@ namespace coil::protocol
 		if (pktBody != nullptr && actualPacketLength > MIN_PKT_SIZE)
 		{	
 			uint8_t remainingSize = actualPacketLength - HEADER_SIZE;
-			   memcpy(writePtr, pktBody, packetBodyLength);
+			std::memcpy(writePtr, pktBody, static_cast<size_t>(packetBodyLength));
 
 			// Advance the pointer past the body
 			writePtr += packetBodyLength;
@@ -409,7 +414,7 @@ namespace coil::protocol
 		if (header.driveBit && packetBodyLength == 0) return false;
 
 		// Check if SLEEP command has a body - it should NOT have one, so if sleepBit is set and body length is greater than 0, it's invalid
-		if (header.sleepBit && packetBodyLength > 0) return false;
+		//if (header.sleepBit && packetBodyLength > 0) return false;
 
 		return true;  // Valid combination
 	}

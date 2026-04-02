@@ -7,7 +7,7 @@ namespace coil::protocol
 {
 	class PktDef {
 	private:
-	
+
 		Header pktHeader; // 4 bytes
 		char* pktBody; // Variable length body data
 		uint8_t pktCRC; // 1 byte for CRC value

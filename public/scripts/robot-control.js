@@ -32,11 +32,16 @@ class RobotController {
         this.btnStop = document.getElementById('btnStop');
         this.btnStatus = document.getElementById('btnStatus');
 
-        // Status elements
+        // Status elements (telemetry)
         this.statusIndicator = document.getElementById('statusIndicator');
         this.statusText = document.getElementById('statusText');
-        this.batteryLevel = document.getElementById('batteryLevel');
-        this.positionDisplay = document.getElementById('positionDisplay');
+        this.lastPktCounter = document.getElementById('lastPktCounter');
+        this.currentGrade = document.getElementById('currentGrade');
+        this.hitCount = document.getElementById('hitCount');
+        this.heading = document.getElementById('heading');
+        this.lastCommand = document.getElementById('lastCommand');
+        this.lastCommandValue = document.getElementById('lastCommandValue');
+        this.lastCommandPower = document.getElementById('lastCommandPower');
         this.lastUpdate = document.getElementById('lastUpdate');
     }
 
@@ -146,7 +151,7 @@ class RobotController {
      */
     async requestStatus() {
         try {
-            const response = await fetch('/robot/telemetry', {
+            const response = await fetch('/robot/telemetry_request', {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json'
@@ -154,14 +159,15 @@ class RobotController {
             });
 
             if (response.ok) {
-                const status = await response.json();
-                this.updateStatusDisplay(status);
+                const body = await response.json();
+                const telemetry = body.telemetry || {};
+                this.updateStatusDisplay(telemetry);
 
                 // Log in command history
                 window.commandHistory?.addEntry({
                     type: 'STATUS_REQUEST',
                     timestamp: new Date(),
-                    response: status,
+                    response: body,
                     success: true
                 });
             } else {
@@ -287,12 +293,14 @@ class RobotController {
      * Update status display with telemetry data
      */
     updateStatusDisplay(status) {
-        if (status.battery !== undefined) {
-            this.batteryLevel.textContent = status.battery;
-        }
-        if (status.position !== undefined) {
-            this.positionDisplay.textContent = status.position;
-        }
+        if (!status) return;
+        if (status.last_packet_counter !== undefined) this.lastPktCounter.textContent = status.last_packet_counter;
+        if (status.current_grade !== undefined) this.currentGrade.textContent = status.current_grade;
+        if (status.hit_count !== undefined) this.hitCount.textContent = status.hit_count;
+        if (status.heading !== undefined) this.heading.textContent = status.heading;
+        if (status.last_command !== undefined) this.lastCommand.textContent = status.last_command;
+        if (status.last_command_value !== undefined) this.lastCommandValue.textContent = status.last_command_value;
+        if (status.last_command_power !== undefined) this.lastCommandPower.textContent = status.last_command_power;
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
     }
 

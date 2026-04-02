@@ -34,8 +34,8 @@
                     <div class="input-group">
                         <label for="socketType">Socket Type:</label>
                         <select id="socketType">
-                            <option value="tcp">TCP</option>
-                            <option value="udp">UDP</option>
+                            <option value="0">TCP</option>
+                            <option value="1">UDP</option>
                         </select>
                     </div>
                 </div>
@@ -106,10 +106,15 @@
                 <div class="status-section">
                     <h3>Robot Status</h3>
                     <div id="statusDisplay" class="status-display">
-                        <p>Battery: <span id="batteryLevel">--</span>%</p>
-                        <p>Position: <span id="positionDisplay">--</span></p>
-                        <p>Last Update: <span id="lastUpdate">Never</span></p>
-                    </div>
+                            <p>Last Packet Counter: <span id="lastPktCounter">--</span></p>
+                            <p>Current Grade: <span id="currentGrade">--</span></p>
+                            <p>Hit Count: <span id="hitCount">--</span></p>
+                            <p>Heading: <span id="heading">--</span></p>
+                            <p>Last Command: <span id="lastCommand">--</span></p>
+                            <p>Last Command Value: <span id="lastCommandValue">--</span></p>
+                            <p>Last Command Power: <span id="lastCommandPower">--</span></p>
+                            <p>Last Update: <span id="lastUpdate">Never</span></p>
+                        </div>
                 </div>
 
                 <div class="history-section">

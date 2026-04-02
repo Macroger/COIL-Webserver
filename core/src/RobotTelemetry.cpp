@@ -4,22 +4,22 @@
 
 namespace coil::protocol
 {
-	RobotTelemetry RobotTelemetry::Deserialize(const unsigned char* data, std::size_t length)
+	RobotTelemetry RobotTelemetry::Deserialize(const unsigned char* data, size_t length)
 	{
 		if (length < 11) {
-			throw std::invalid_argument("Telemetry data too short - expected at least 13 bytes");
+			throw std::invalid_argument("Telemetry data too short - expected at least 11 bytes");
 		}
 
 		RobotTelemetry telemetry;
 
-		// ⚠️ FIX: Server sends LITTLE-ENDIAN (LSB first), not big-endian!
-		// OLD (big-endian):  (data[0] << 8) | data[1]
-		// NEW (little-endian): (data[1] << 8) | data[0]
+		// FIX: Server sends LITTLE-ENDIAN (LSB first), not big-endian!
+		// old (big-endian):  (data[0] << 8) | data[1]
+		// new (little-endian): (data[1] << 8) | data[0]
 
-		telemetry.LastPktCounter = (data[1] << 8) | data[0];  // ✅ Changed byte order
-		telemetry.CurrentGrade = (data[3] << 8) | data[2];  // ✅ Changed byte order
-		telemetry.HitCount = (data[5] << 8) | data[4];  // ✅ Changed byte order
-		telemetry.Heading = (data[7] << 8) | data[6];  // ✅ Changed byte order
+		telemetry.LastPktCounter = (data[1] << 8) | data[0];  // Changed byte order
+		telemetry.CurrentGrade = (data[3] << 8) | data[2];  // Changed byte order
+		telemetry.HitCount = (data[5] << 8) | data[4];  //  Changed byte order
+		telemetry.Heading = (data[7] << 8) | data[6];  // Changed byte order
 
 		// Single-byte values stay the same
 		telemetry.LastCmd = data[10];

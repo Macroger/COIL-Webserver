@@ -2,16 +2,23 @@
 #include <string>
 #include "types.h"
 #include "constants.h"
+
+// POSIX socket includes (Linux target)
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-typedef int SocketHandle;
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
+#include <fcntl.h>
+#include <netdb.h>
+#include <cstring>
+#include <cerrno>
 
-using SOCKET = SocketHandle; // Compatibility alias for existing SOCKET references
 using namespace std;
+
+// Define a platform-agnostic socket handle type for the project.
+using SocketHandle = int;
+constexpr SocketHandle INVALID_SOCKET = -1;
 namespace coil::protocol
 {
 	
@@ -23,13 +30,14 @@ namespace coil::protocol
 		char* buffer;
 
 		// Socket address structure for the server
-		sockaddr_in SvrAddr;
+		sockaddr_in LocalAddr;   // used with bind()
+		sockaddr_in RemoteAddr;  // used with connect() / sendto()
 
 		// Listening socket for TCP
-		SOCKET WelcomeSocket; 
+		SocketHandle WelcomeSocket; 
 
 		// Accepted connection socket for message transfer
-		SOCKET ConnectionSocket; 
+		SocketHandle ConnectionSocket; 
 		
 		// Holds the type of socket this object has been configured as.
 		SocketType SockType;
@@ -49,7 +57,9 @@ namespace coil::protocol
 		// Flag to track TCP connection status
 		bool bTCPConnected;
 
-		bool wsaOwned;
+		int recvTimeoutSeconds;
+		uint packetSentCount;
+		uint packetReceivedCount;
 
 	public:
 		MySocket(SocketType, ConnectionType, uint16_t, uint8_t, string);
@@ -58,17 +68,29 @@ namespace coil::protocol
 
 		void ConnectTCP();
 		void DisconnectTCP();
-		void SendData(const char* data, int size);
+		void InvalidateSockets();
+		void CreateSocket();
+		
 		bool ValidateIPAddress(string);
 		bool AcceptConnection(int timeoutSeconds = coil::protocol::constants::DEFAULT_SOCKET_TIMEOUT);
 
-		int GetData(char*, int timeoutSeconds = 0);	// Timeout of 0 equals no timeout (blocking call)
+		int GetData(char*);
+		void SendData(const char* data, int size);
+
 		std::string GetIPAddr();
 		int GetPort();
 		SocketType GetType();
+		ConnectionType GetConnectionType();
+
 		void SetType(SocketType);
-		void SetPort(int); //intellisence thinks SetPort is from the Windows.h "#define SetPort SetPortW"
+		void SetSocketPort(int); 
 		void SetIPAddr(std::string);
+		void SetConnectionType(ConnectionType connType);
+		void SetReceiveTimeout(int timeoutSeconds);
+
+		bool IsConnected() const;
+		bool Ping(int attempts);
+		coil::protocol::RobotTelemetry GetTelemetry();
 	};
 }
 

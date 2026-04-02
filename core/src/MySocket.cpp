@@ -1,12 +1,13 @@
 // Linux-only cleanup
 #include "MySocket.h"
+#include "pktdef.h"
 #include <format>
 #include <stdexcept>
 #include <cstring>
 using namespace coil::protocol::constants;
 namespace coil::protocol
 {
-	/// <summary>
+		/// <summary>
 	/// Constructs a MySocket object with the specified socket configuration and validates the input parameters.
 	/// </summary>
 	/// <param name="socketType">The type of socket to create. Server or Client.</param>
@@ -18,84 +19,69 @@ namespace coil::protocol
 	{
 		// Perform validations on incomming items
 		if (port >= MAX_PORT_NUMBER) throw std::invalid_argument(std::format("Invalid Port: {}. Port number must be between 0 and {}", port, MAX_PORT_NUMBER));
+		
+		// Check if the provided IP address is in a valid format using the ValidateIPAddress method. 
 		if (ValidateIPAddress(targetIPAddress) == false) throw std::invalid_argument("Invalid IP address format");
-		if (bufferSize < MIN_PKT_SIZE || bufferSize > MAX_PKT_SIZE)
-		{
-			// If provided maxSize is outside valid range for packet sizes, set it to the default buffer size to ensure it can accommodate any valid packet.
-			bufferSize = DEFAULT_SIZE;
-		}	
 		
-		// Initialize TCP connection status to false
-		this->ConnectionSocket = INVALID_SOCKET;
-		this->WelcomeSocket = INVALID_SOCKET;
-		this->ConnType = connectionType;
-		this->SockType = socketType;
-		this->bTCPConnected = false;
-		this->IPAddr = targetIPAddress;
-		this->MaxSize = bufferSize;
-		this->Port = port;
-		this->wsaOwned = false;
+		// If provided maxSize is outside valid range for packet sizes, set it to the default buffer size to ensure it can accommodate any valid packet.
+		if (bufferSize < MIN_PKT_SIZE || bufferSize > MAX_PKT_SIZE) bufferSize = DEFAULT_SIZE;
 
-		// Setup internal buffer for receiving data - allocate memory for the buffer based on the specified buffer size.
-		this->buffer = new char[this->MaxSize];
-		memset(buffer, 0, MaxSize);  // zero-initialize (zero-out the buffer to ensure it starts in a known state)		
-			
-		// Create socket (same on both platforms)		
-		// Check if the connection type is TCP or UDP and create the appropriate socket type accordingly.
-		// TCP uses SOCK_STREAM, while UDP uses SOCK_DGRAM.
-		int sockType = (connectionType == ConnectionType::TCP) ? SOCK_STREAM : SOCK_DGRAM;
+		// --- Initialize configuration state ---
+		SockType			= socketType;
+		ConnType			= connectionType;
+		Port				= port;
+		IPAddr				= targetIPAddress;
+		MaxSize				= bufferSize;
+		bTCPConnected		= false;
+		recvTimeoutSeconds	= DEFAULT_SOCKET_TIMEOUT;
+		ConnectionSocket	= INVALID_SOCKET;
+		WelcomeSocket		= INVALID_SOCKET;
+		buffer				= nullptr;
+		packetSentCount		= 0;
+		packetReceivedCount = 0;
+
+		// --- Allocate receive buffer ---
+		buffer = new char[MaxSize];			// Setup internal buffer for receiving data - allocate memory for the buffer based on the specified buffer size.
+		std::memset(buffer, 0, MaxSize);	// zero-initialize (zero-out the buffer to ensure it starts in a known state)
 		
-		// Create the socket using the specified type and protocol.
-		ConnectionSocket = socket(AF_INET, sockType, 0);
-
-		// If socket creation failed throw an exception.
-		if (ConnectionSocket == INVALID_SOCKET)
+		try
 		{
-			// Clean up before throwing
-			delete[] buffer;
-			buffer = nullptr;			
-			throw std::runtime_error("Failed to create socket");
+			// Initialize address structures to zero to ensure they start in a known state and prevent potential issues with uninitialized memory.
+			memset(&LocalAddr, 0, sizeof(LocalAddr));
+			memset(&RemoteAddr, 0, sizeof(RemoteAddr));
+
+			// Set up Local address structure
+			LocalAddr.sin_family = AF_INET;
+			LocalAddr.sin_port = htons(Port);
+			LocalAddr.sin_addr.s_addr = INADDR_ANY;
+
+			// Set up the Remote address structure, which will be used for connecting to a server (client mode) or sending data to a specific address (UDP client mode).
+			RemoteAddr.sin_family = AF_INET;
+			RemoteAddr.sin_port = htons(Port);
+
+			if (inet_pton(AF_INET, IPAddr.c_str(), &RemoteAddr.sin_addr) <= 0)
+				throw std::invalid_argument("Invalid IP address format");
+
+			//  Create the initial socket
+			CreateSocket();
 		}
-
-		// Set up address structure
-		SvrAddr.sin_family = AF_INET;
-		SvrAddr.sin_port = htons(port);
-
-		switch (SockType)
+		catch (...)
 		{
-			case SocketType::SERVER:
-				// Initialize server socket and bind to the specified port
-				SvrAddr.sin_addr.s_addr = INADDR_ANY;
+			// --- Cleanup on constructor failure ---
+			if (ConnectionSocket != INVALID_SOCKET)
+			{
+				::close(ConnectionSocket);
+				ConnectionSocket = INVALID_SOCKET;
+			}
 
-				   if (bind(ConnectionSocket, (sockaddr*)&SvrAddr, sizeof(SvrAddr)) == SOCKET_ERROR)
-				   {
-					   close(ConnectionSocket);
-					   delete[] buffer;
-					   buffer = nullptr;
-					   throw std::runtime_error("Failed to bind socket");
-				   }
+			if (buffer)
+			{
+				delete[] buffer;
+				buffer = nullptr;
+			}
 
-				// IF TCP - Setup the listening socket, but do not call accept yet as that is a blocking call.
-				// We will call accept in the ConnectTCP() method when we want to establish the connection,
-				// which allows us to control when we block waiting for a client to connect.
-				   if (ConnType == ConnectionType::TCP) 
-				   {
-					   if (listen(ConnectionSocket, 1) == SOCKET_ERROR)
-					   {
-						   close(ConnectionSocket);
-						   delete[] buffer;
-						   buffer = nullptr;
-						   throw std::runtime_error("Failed to listen on socket");
-					   }
-					   WelcomeSocket = ConnectionSocket;
-				   }
-				break;
-
-			case SocketType::CLIENT:
-				// Initialize client socket and prepare to connect to the specified IP and port
-				// Convert the target IP address from string format to binary format and store it in the SvrAddr structure.
-				inet_pton(AF_INET, targetIPAddress.c_str(), &SvrAddr.sin_addr);
-				break;
+			// No WinSock cleanup needed on POSIX
+			throw;  // re-throw original exception
 		}
 	}
 
@@ -103,60 +89,200 @@ namespace coil::protocol
 	/// Destructor to clean up resources after the MySocket object is destroyed.
 	/// It ensures that any dynamically allocated memory is freed and that any open sockets are properly closed to prevent resource leaks.
 	/// </summary>
-	   MySocket::~MySocket()
-	   {
-		   delete[] buffer;
-		   buffer = nullptr;
-		   if (ConnectionSocket != INVALID_SOCKET) 
-			   close(ConnectionSocket);
-		   if (WelcomeSocket != INVALID_SOCKET && WelcomeSocket != ConnectionSocket) 
-			   close(WelcomeSocket);
-	   }
-	
+	MySocket::~MySocket()
+	{
+		delete[] buffer;
+		buffer = nullptr;
+
+		if (ConnectionSocket != INVALID_SOCKET)
+			::close(ConnectionSocket);
+
+		if (WelcomeSocket != INVALID_SOCKET && WelcomeSocket != ConnectionSocket)
+			::close(WelcomeSocket);
+	}
+
 	/// <summary>
 	/// Establishes a TCP connection, either by connecting to a server (client mode) or accepting a client connection (server mode).
 	/// </summary>
 	void MySocket::ConnectTCP()
 	{
-		if (this->ConnType == ConnectionType::UDP) throw std::runtime_error("ConnectTCP can only be called for TCP connections");
+		if (this->ConnType != ConnectionType::TCP) throw std::runtime_error("ConnectTCP can only be called for TCP connections");
 		
 		if (bTCPConnected) throw std::runtime_error("Unable to connect. Already connected.");; // Already connected, no need to connect again
+
+		// If the socket is invalid, create a new one. 
+		// This allows for ConnectTCP to be called again after a disconnect without requiring the user to manually call CreateSocket.
+		if (ConnectionSocket == INVALID_SOCKET) CreateSocket();
 
 		if (this->SockType == SocketType::CLIENT)
 		{
 			// For a TCP client, we need to connect to the server using the specified IP and port.
-			if (connect(ConnectionSocket, (sockaddr*)&SvrAddr, sizeof(SvrAddr)) == SOCKET_ERROR) 
+			if (connect(ConnectionSocket, (sockaddr*)&RemoteAddr, sizeof(RemoteAddr)) < 0)
 			{
-				throw std::runtime_error("Failed to connect to server");
+				throw std::runtime_error(std::string("Failed to connect to server: ") + std::strerror(errno));
 			}
 
 			bTCPConnected = true; // Set connection status to true after successful connection
 		}
 		else if (this->SockType == SocketType::SERVER)
 		{
-			// For a TCP server, we wait for clients to connect using the AcceptConnection method.
-			if (AcceptConnection() == false)
-			{
-				throw std::runtime_error(std::format("Failed to accept incoming connection within specified timelimit ({} seconds).", DEFAULT_SOCKET_TIMEOUT));
-			}
-			else
-			{
-				bTCPConnected = true; // Set connection status to true after successfully accepting a client connection
-			}
-		}		
-	}	
-	
+			throw std::runtime_error("Server configured connection cannot initiate a connection");
+		}
+	}
+
 	/// <summary>
 	/// Disconnects an active TCP connection and releases the associated socket.
 	/// </summary>
-	   void MySocket::DisconnectTCP()
-	   {
-		   if (bTCPConnected == false) throw runtime_error("Not currently connected; unable to disconnect.");
-		   shutdown(ConnectionSocket, SHUT_RDWR);
-		   close(ConnectionSocket);
-		   ConnectionSocket = INVALID_SOCKET;
-		   bTCPConnected = false;
-	   }
+	/// <exception> 
+	/// std::runtime_error if the connection type is not TCP or if there is no active connection to disconnect.
+	/// </exception>
+	void MySocket::DisconnectTCP()
+	{
+		if (ConnType != ConnectionType::TCP) throw std::runtime_error("DisconnectTCP can only be called for TCP connections");
+		if (bTCPConnected == false) throw runtime_error("Not currently connected; unable to disconnect.");
+
+		// Gracefully shutdown the connection (disable send/receive)
+			shutdown(ConnectionSocket, SHUT_RDWR);
+			::close(ConnectionSocket);
+
+			ConnectionSocket = INVALID_SOCKET;  // Mark as invalid
+		bTCPConnected = false;
+	}
+
+	/// <summary>
+	/// Helper method to create a new socket based on the current configuration of the MySocket object. 
+	/// It checks for existing sockets and connection status before creating a new socket, and applies necessary options such as receive timeout.
+	/// </summary>
+	void MySocket::CreateSocket()
+	{
+		// Check if the socket already exists before attempting to create a new one.
+		if (ConnectionSocket != INVALID_SOCKET) throw std::logic_error("CreateSocket called while a socket already exists");
+
+		// Check if the socket is currently connected.
+		if (bTCPConnected) throw std::logic_error("CreateSocket called while TCP connection is active");
+
+		// Determine the socket type based on the connection type. TCP uses SOCK_STREAM, while UDP uses SOCK_DGRAM.
+		int sockType = (ConnType == ConnectionType::TCP) ? SOCK_STREAM : SOCK_DGRAM;
+
+		ConnectionSocket = socket(AF_INET, sockType, 0);
+
+		if (ConnectionSocket == INVALID_SOCKET)
+		{
+			throw std::runtime_error(std::string("Failed to create socket: ") + std::strerror(errno));
+		}
+		
+		// Bind is required for:
+		//   - All SERVER sockets (TCP or UDP)
+		//   - All UDP sockets (client or server)
+		if (SockType == SocketType::SERVER || ConnType == ConnectionType::UDP)
+		{
+			if (bind(ConnectionSocket,
+				reinterpret_cast<sockaddr*>(&LocalAddr),
+				sizeof(LocalAddr)) < 0)
+			{
+				int err = errno;
+				::close(ConnectionSocket);
+				ConnectionSocket = INVALID_SOCKET;
+				throw std::runtime_error(std::string("Failed to bind socket: ") + std::strerror(err));
+			}
+		}
+
+		// --- Listen if TCP server ---
+		if (SockType == SocketType::SERVER && ConnType == ConnectionType::TCP)
+		{
+			if (listen(ConnectionSocket, 1) < 0)
+			{
+				int err = errno;
+				::close(ConnectionSocket);
+				ConnectionSocket = INVALID_SOCKET;
+				throw std::runtime_error(std::string("Failed to listen on socket: ") + std::strerror(err));
+			}
+
+			// Listening socket is the connection socket until accept()
+			WelcomeSocket = ConnectionSocket;
+		}
+		else
+		{
+			// Non-server sockets must not have a welcome socket
+			WelcomeSocket = INVALID_SOCKET;
+		}
+
+		// --- Apply socket options ---
+		// Safe to do only after bind/listen decisions are complete.
+		SetReceiveTimeout(recvTimeoutSeconds);
+	}
+
+	/// <summary>
+	/// Receives data from the socket (TCP or UDP) and copies it into the
+	/// caller‑provided buffer. For TCP, this function uses recv(). For UDP,
+	/// it uses recvfrom() and updates the stored server address. The received
+	/// bytes are first placed into the internal buffer and then copied into mAddr.
+	/// Throws an exception if the receive operation fails or if copying fails.
+	/// </summary>
+	/// <param name="mAddr">
+	/// Pointer to a caller‑allocated buffer where the received data will be copied.
+	/// The buffer must be large enough to hold the number of bytes returned.
+	/// </param>
+	/// <returns>
+	/// Number of bytes copied into mAddr. A return value of 0 indicates a graceful
+	/// TCP connection close.
+	/// </returns>
+	int MySocket::GetData(char* mAddr)
+	{
+		if (ConnectionSocket == INVALID_SOCKET) CreateSocket();
+
+		int bytecount = 0;
+
+		//Check if connection is TCP or UDP
+		if (ConnType == ConnectionType::TCP)
+		{
+			bytecount = recv(ConnectionSocket, buffer, MaxSize, 0);
+		}
+		else
+		{
+			socklen_t addrLen = sizeof(RemoteAddr);
+			bytecount = recvfrom(ConnectionSocket, buffer, MaxSize, 0,
+				(sockaddr*)&RemoteAddr, &addrLen);
+		}
+
+		// Error check (check if bytes have been received)
+		if (bytecount < 0)
+		{
+			if (errno == EWOULDBLOCK || errno == EAGAIN)
+			{
+				return 0;  // Timeout / non-blocking no-data
+			}
+			else
+			{
+				throw std::runtime_error(std::string("GetData Error: Socket failure: ") + std::strerror(errno));
+			}
+		}
+
+		// Check if the connection was closed by the peer (TCP) - if recv returns 0,
+		// it means the connection has been gracefully closed by the peer.
+		if (bytecount == 0)
+		{
+			if (this->ConnType == ConnectionType::TCP)
+			{
+				::close(ConnectionSocket);
+				ConnectionSocket = INVALID_SOCKET;
+				bTCPConnected = false;
+				return 0;
+			}
+			else if (this->ConnType == ConnectionType::UDP)
+			{
+				throw std::runtime_error("GetData Error: Received 0 bytes from UDP socket, which violates protocol");
+			}
+		}
+
+		//Copy buffer to recieved memory address
+		// Copy received bytes into caller buffer
+		std::memcpy(mAddr, buffer, static_cast<size_t>(bytecount));
+
+		packetReceivedCount++;
+
+		return bytecount; // return the number of bytes written to mAddr
+	}
 
 	/// <summary>
 	/// Sends data over the socket connection. For TCP, it sends data over the established connection socket.
@@ -169,8 +295,10 @@ namespace coil::protocol
 		// Validation
 		if (data == nullptr) throw std::invalid_argument("data cannot be null");
 		if (size <= 0) throw std::invalid_argument("size must be greater than 0");
-		if (size > MAX_PKT_SIZE)
-			throw std::invalid_argument(std::format("Size ({} bytes) exceeds max packet size ({} bytes)", size, MAX_PKT_SIZE));
+		if (size > MaxSize) throw std::invalid_argument(std::format("size ({} bytes) exceeds configured buffer size ({} bytes)", size, MaxSize));
+			
+		// Check if the socket is valid before attempting to send data. If the socket is invalid, we attempt to create a new one.
+		if (ConnectionSocket == INVALID_SOCKET) CreateSocket();
 
 		// Check if in TCP mode and connected before attempting to send data
 		if (this->ConnType == ConnectionType::TCP)
@@ -179,18 +307,29 @@ namespace coil::protocol
 			if (!bTCPConnected) throw std::runtime_error("Not connected to a TCP peer; unable to send data.");
 
 			// Use send for TCP connections, which sends data over the established connection socket.
-			   int bytesSent = send(ConnectionSocket, data, size, 0);
-			   if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
-			   if (bytesSent != size) throw std::runtime_error("Partial send occurred");
+			ssize_t bytesSent = send(ConnectionSocket, data, size, 0);
+
+			// Check if the send operation was successful and throw an exception if it fails.
+			if (bytesSent < 0) throw std::runtime_error(std::string("Failed to send data: ") + std::strerror(errno));
+
+			// Double check that the correct number of bytes was sent. If not, throw an exception.
+			if (bytesSent != size) throw std::runtime_error("Partial send occurred");
 		}
 		else if (this->ConnType == ConnectionType::UDP)
 		{
 			// Send data using sendto for UDP connections, which sends data to the specified address and port
 			// without needing an established connection.
-			   int bytesSent = sendto(ConnectionSocket, data, size, 0, (sockaddr*)&SvrAddr, sizeof(SvrAddr));
-			   if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
-			   if (bytesSent != size) throw std::runtime_error("Partial send occurred");
+			ssize_t bytesSent = sendto(ConnectionSocket, data, size, 0, (sockaddr*)&RemoteAddr, sizeof(RemoteAddr));
+
+			// Check if the send operation was successful and throw an exception if it fails.
+			if (bytesSent < 0) throw std::runtime_error(std::string("Failed to send data: ") + std::strerror(errno));
+
+			// Double check that the correct number of bytes was sent. If not, throw an exception.
+			if (bytesSent != size) throw std::runtime_error("Partial send occurred");
+			
 		}
+
+		packetSentCount++;
 	}
 
 	/// <summary>
@@ -214,103 +353,52 @@ namespace coil::protocol
 	{
 		// Check if the socket is configured as a TCP server, as only TCP servers can accept incoming connections. 
 		// If it is not a TCP server, we throw an exception with an error message.
-		if (SockType != SocketType::SERVER || ConnType != ConnectionType::TCP) 
+		if (SockType != SocketType::SERVER || ConnType != ConnectionType::TCP)
 			throw std::runtime_error("Only TCP servers can accept connections");
 
-		// Set timeout on the listening socket
-		   // Convert timeoutSeconds to timeval structure
-		   struct timeval tv;
-		   tv.tv_sec = timeoutSeconds;
-		   tv.tv_usec = 0;
-		   if (setsockopt(WelcomeSocket, SOL_SOCKET, SO_RCVTIMEO,
-			   (const void*)&tv, sizeof(tv)) < 0) 
-		   {
-			   throw std::runtime_error("Failed to set socket timeout");
-		   }
 
-		// Now we call accept, which will block until a client connects or the timeout is reached.		
+		if (WelcomeSocket == INVALID_SOCKET)
+			throw std::logic_error("AcceptConnection called with invalid WelcomeSocket");		
+
+		// --- Prepare for select() ---
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(WelcomeSocket, &readfds);
+
+		timeval tv;
+		tv.tv_sec = timeoutSeconds;
+		tv.tv_usec = 0;
+
+		// --- Wait for incoming connection ---
+		int ready = select(
+			WelcomeSocket + 1,
+			&readfds,
+			nullptr,
+			nullptr,
+			&tv
+		);
+
+		// --- Handle select() result ---
+		if (ready == 0) return false;
+
+		// Check if an error occurred during select
+		if (ready < 0)
+		{
+			throw std::runtime_error(std::string("select() failed: ") + std::strerror(errno));
+		}
+
+		// Now we call accept, which will not block because we already know there is a pending connection via select.
 		ConnectionSocket = accept(WelcomeSocket, NULL, NULL);
 
-		// If accept returns INVALID_SOCKET, we check if it was due to a timeout or an actual error.
-		   if (ConnectionSocket == INVALID_SOCKET) 
-		   {
-			   // On Linux, accept will return -1 and set errno to EWOULDBLOCK or EAGAIN if the timeout is reached.
-			   if (errno == EWOULDBLOCK || errno == EAGAIN) 
-			   {
-				   return false;  // Timeout
-			   }
-			   throw std::runtime_error("Failed to accept connection");
-		   }
-
-		// Return true to indicate that a client has successfully connected within the timeout period.
-		return true; 
-	}
-
-	/// <summary>
-	/// Receives data from the socket (TCP or UDP) and copies it into the
-	/// caller‑provided buffer. For TCP, this function uses recv(). For UDP,
-	/// it uses recvfrom() and updates the stored server address. The received
-	/// bytes are first placed into the internal buffer and then copied into mAddr.
-	/// Throws an exception if the receive operation fails or if copying fails.
-	/// </summary>
-	/// <param name="mAddr">
-	/// Pointer to a caller‑allocated buffer where the received data will be copied.
-	/// The buffer must be large enough to hold the number of bytes returned.
-	/// </param>
-	/// <returns>
-	/// Number of bytes copied into mAddr. A return value of 0 indicates a graceful
-	/// TCP connection close.
-	/// </returns>
-	int MySocket::GetData(char* mAddr, int timeoutSeconds) 
-	{ 
-
-		// Set timeout if specified (similar to your AcceptConnection code)
-		   if (timeoutSeconds > 0) 
-		   {
-			   struct timeval tv;
-			   tv.tv_sec = timeoutSeconds;
-			   tv.tv_usec = 0;
-			   if (setsockopt(ConnectionSocket, SOL_SOCKET, SO_RCVTIMEO,
-				   &tv, sizeof(tv)) < 0)
-			   {
-				   throw std::runtime_error("Failed to set receive timeout");
-			   }
-		   }
-		int bytecount = 0;
-
-		//Check if connection is TCP or UDP
-		if (this->ConnType == ConnectionType::TCP) {
-			bytecount = recv(ConnectionSocket, buffer, MaxSize, 0);
-		}
-		else if (this->ConnType == ConnectionType::UDP) {
-			socklen_t addrLen = sizeof(SvrAddr);
-			bytecount = recvfrom(ConnectionSocket, buffer, MaxSize, 0, (sockaddr*)&SvrAddr, &addrLen);
-		}
-
-		// Check if the connection was closed by the peer (TCP) - if recv returns 0,
-		// it means the connection has been gracefully closed by the peer.
-		if (this->ConnType == ConnectionType::TCP && bytecount == 0)
+		// If accept returns INVALID_SOCKET, throw an exception with the appropriate error message.
+		if (ConnectionSocket == INVALID_SOCKET)
 		{
-			bTCPConnected = false;
-			return 0; // Connection closed by peer
+			throw std::runtime_error(std::string("accept() failed: ") + std::strerror(errno));
 		}
 
-		//errorcheck (check if bytes have been recieved
-		   if (bytecount == SOCKET_ERROR)
-		   {
-			   if (errno == EWOULDBLOCK || errno == EAGAIN)
-			   {
-				   return 0;  // Timeout
-			   }   
-			   else
-			   {
-				   throw std::runtime_error(std::format("GetData Error: Socket failure code: {}", errno));
-			   }
-		   }
-		   //Copy buffer to received memory address
-		   memcpy(mAddr, buffer, bytecount);
-		   return bytecount;
+		return true;  // Client successfully connected
 	}
+
 
 	/// <summary>
 	/// Retrieves IP address configured within MySocket
@@ -332,29 +420,40 @@ namespace coil::protocol
 	/// Retrieves SocketType stored within MySocket
 	/// </summary>
 	/// <returns>SockType</returns>
-	SocketType MySocket::GetType() { 
+	SocketType MySocket::GetType() {
 		return this->SockType;
 	}
 
 	/// <summary>
-	/// Changes the default socket type within the MySocket object
+	/// Gets the connection type (TCP or UDP) for the socket. This indicates whether the socket is configured to use TCP or UDP for communication.
 	/// </summary>
-	/// <param name="type"></param>
+	/// <returns></returns>
+	ConnectionType MySocket::GetConnectionType()
+	{
+		return this->ConnType;
+	}
+
+	/// <summary>
+	/// Changes the default socket type within the MySocket object. 
+	/// </summary>
+	/// <param name="type">SocketType: SERVER or CLIENT.</param>
 	void MySocket::SetType(SocketType type) {
 		// return an error message if a connection has already been established 
 		if (bTCPConnected == true) throw std::runtime_error("SetType not permittd: TCP session is already established");
-
 		// return error message if welcome socket is open
 		if (WelcomeSocket != INVALID_SOCKET) throw std::runtime_error("SetType not permittd: Welcome Socket is Open");
 
 		this->SockType = type;
+
+		// Changing type invalidates socket identity
+		InvalidateSockets();
 	}
 
 	/// <summary>
 	/// Changes the default port number within MySoket, 
 	/// </summary>
 	/// <param name="port"></param>
-	void MySocket::SetPort(int port) {  
+	void MySocket::SetSocketPort(int port) {
 		// return an error message if a connection has already been established 
 		if (bTCPConnected == true) throw std::runtime_error("SetPort not permittd: TCP session is already established");
 		// return error message if welcome socket is open
@@ -364,6 +463,13 @@ namespace coil::protocol
 		if (port >= MAX_PORT_NUMBER || port <= 0) throw std::invalid_argument(std::format("Invalid Port: {}. Port number must be between 1 and {}", port, MAX_PORT_NUMBER));
 
 		this->Port = port;
+
+		LocalAddr.sin_port = htons(port);
+		RemoteAddr.sin_port = htons(port);
+
+
+		// Changing port invalidates socket identity
+		InvalidateSockets();
 	}
 
 	/// <summary>
@@ -377,5 +483,183 @@ namespace coil::protocol
 		if (WelcomeSocket != INVALID_SOCKET) throw std::runtime_error("SetIPAddr not permittd: Welcome Socket is Open");
 
 		this->IPAddr = IPaddr;
+
+		inet_pton(AF_INET, IPAddr.c_str(), &RemoteAddr.sin_addr);
+
+		// Changing IPAddr invalidates socket identity
+		InvalidateSockets();
+	}
+
+	/// <summary>
+	/// Adjust the connection type (TCP or UDP) for the socket. Changing the type invalidates the current socket(s), so can't be done while tcp connection is active.
+	/// </summary>
+	/// <param name="connType"></param>
+	void MySocket::SetConnectionType(ConnectionType connType)
+	{
+		// return an error message if a connection has already been established 
+		if (bTCPConnected == true) throw std::runtime_error("SetConnectionType not permittd: TCP session is already established");
+		// return error message if welcome socket is open
+		if (WelcomeSocket != INVALID_SOCKET) throw std::runtime_error("SetConnectionType not permittd: Welcome Socket is Open");
+
+		if (ConnType != connType)
+		{
+			this->ConnType = connType;
+
+			// Changing connection type invalidates socket identity
+			InvalidateSockets();
+		}		
+	}
+
+	/// <summary>
+	/// Sets the receive timeout for the socket connection. This timeout determines how long the socket will wait for incoming data before timing out.
+	/// </summary>
+	/// <param name="timeoutSeconds"></param>
+	void MySocket::SetReceiveTimeout(int timeoutSeconds)
+	{		
+		// If the timeoutSeconds is below 0, we throw an exception with an error message.
+		if (timeoutSeconds < 0) throw std::invalid_argument("Receive timeout must be >= 0 seconds");
+
+		// No change in timeout, skip setting
+		if (timeoutSeconds == recvTimeoutSeconds) return;
+
+		// Check if the ConnectionSocket is valid before attempting to set the timeout. If it is not valid, we throw an exception with an error message.
+		if (ConnectionSocket == INVALID_SOCKET) throw std::runtime_error("Cannot set receive timeout: Socket is not valid");
+
+		// Set a timeout value for the ConnectionSocket using setsockopt with timeval on POSIX
+		struct timeval tv;
+		tv.tv_sec = timeoutSeconds;
+		tv.tv_usec = 0;
+
+		if (setsockopt(
+			ConnectionSocket,
+			SOL_SOCKET,
+			SO_RCVTIMEO,
+			&tv,
+			sizeof(tv)) < 0)
+		{
+			throw std::runtime_error(std::string("Failed to set receive timeout (SO_RCVTIMEO): ") + std::strerror(errno));
+		}
+
+		// Store the timeout value for future reference.
+		recvTimeoutSeconds = timeoutSeconds;
+	}
+
+	/// <summary>
+	/// Invalidates the current sockets by closing any open sockets and marking them as invalid.
+	/// This is used to reset the socket state when changing configuration parameters that affect the socket identity (e.g., type, port, IP address, connection type).
+	/// </summary>
+	/// <remarks> 
+	/// Any change to socket identity (port, IP, protocol, socket type) invalidates all existing OS sockets. New sockets are created on the next connection attempt.
+	/// </remarks>
+	void MySocket::InvalidateSockets()
+	{
+		if (ConnectionSocket != INVALID_SOCKET)
+		{
+			::close(ConnectionSocket);
+
+			ConnectionSocket = INVALID_SOCKET;
+		}
+
+		if (WelcomeSocket != INVALID_SOCKET)
+		{
+			::close(WelcomeSocket);
+
+			WelcomeSocket = INVALID_SOCKET;
+		}
+
+		bTCPConnected = false;
+	}
+
+	/// @brief Checks if the TCP connection is currently established
+	/// @return true if connected, false otherwise
+	bool MySocket::IsConnected() const 
+	{
+		return bTCPConnected;
+	}
+
+	coil::protocol::RobotTelemetry MySocket::GetTelemetry()
+	{
+		// Check if in TCP mode and connected before attempting to get data
+		if (this->ConnType == ConnectionType::TCP)
+		{
+			// Check if connected before getting data - if not connected, we throw an exception with an error message.
+			if (!bTCPConnected) throw std::runtime_error("In TCP mode but not connected to a TCP peer; unable to get telemetry.");
+		}
+	
+		// Build minimal ping packet
+		coil::protocol::PktDef pkt;
+		pkt.SetPktCount(packetSentCount);
+		pkt.SetCmd(coil::protocol::CmdType::RESPONSE);
+
+		const char* out = pkt.GenPacket();
+		int outSize = pkt.GetLength();
+
+		const int bufMax = coil::protocol::constants::MAX_PKT_SIZE;
+		char recvBuf[bufMax];
+
+		SendData(out, outSize); // SendData handles UDP/TCP correctly
+
+		int bytesRead = GetData(recvBuf);
+		if (bytesRead <= 0) throw std::runtime_error("Failed to receive telemetry ACK / NACK response. No data received.");
+
+		// Process response and see if its ACK or NACK
+		PktDef response = PktDef(recvBuf, bytesRead);
+		bool isAck = response.GetAck();
+		if(isAck == false) throw std::runtime_error("Received NACK response to telemetry request, no telemetry data will be sent.");
+
+		char telemBuf[bufMax];
+		int teleBytes = GetData(telemBuf);
+		if (teleBytes <= 0) throw std::runtime_error("Failed to receive telemetry data after ACK response. No data received.");
+
+		RobotTelemetry telem = RobotTelemetry::Deserialize(reinterpret_cast<unsigned char*>(telemBuf), static_cast<std::size_t>(teleBytes));
+
+		return telem;
+	}
+
+	bool MySocket::Ping(int retries)
+	{
+		// Only meaningful for UDP probes, but supports TCP by sending and expecting a reply.
+		if (retries < 1) retries = 1;
+
+		// Build minimal ping packet
+		coil::protocol::PktDef pkt;
+		pkt.SetCmd(coil::protocol::CmdType::RESPONSE);
+
+		const char* out = pkt.GenPacket();
+		int outSize = pkt.GetLength();
+
+		const int bufMax = coil::protocol::constants::MAX_PKT_SIZE;
+		char recvBuf[bufMax];
+
+		for (int attempt = 0; attempt < retries; ++attempt)
+		{
+			try 
+			{
+				SendData(out, outSize); // SendData handles UDP/TCP correctly
+				
+				int received = GetData(recvBuf);
+				if (received > 0) return true;
+
+				// Check if the response was an ACK or a NACK
+				PktDef response = PktDef(recvBuf, received);
+				bool isAck = response.GetAck();
+				
+				// Is a NACK - our response was not accepted so no more messages are coming.
+				// However, it does mean we got a message.
+				if (!isAck) return true; 
+
+				// This is a telem request, it will contain a second response which we should consume.
+				int discard = GetData(recvBuf);
+				if (discard > 0) return true;
+			} 
+			catch (...) 
+			{
+				// sending failed — try again (or bail if you prefer)
+				continue;
+			}
+
+			// else loop to retry
+		}
+		return false;
 	}
 }

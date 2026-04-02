@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Control Dashboard</title>
+    <link rel="stylesheet" href="/get_style/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <h1>Robot Control Dashboard</h1>
+            <div class="connection-status">
+                <span id="statusIndicator" class="status-dot connected"></span>
+                <span id="statusText">Connected</span>
+                <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Settings Panel (Collapsible) -->
+        <div id="settingsPanel" class="settings-panel hidden">
+            <div class="settings-content">
+                <h3>Connection Settings</h3>
+                <div class="settings-group">
+                    <div class="input-group">
+                        <label for="robotIP">Robot IP Address:</label>
+                        <input type="text" id="robotIP" value="localhost" placeholder="IP address">
+                    </div>
+                    <div class="input-group">
+                        <label for="robotPort">Port:</label>
+                        <input type="number" id="robotPort" value="5000" min="1" max="65535">
+                    </div>
+                    <div class="input-group">
+                        <label for="socketType">Socket Type:</label>
+                        <select id="socketType">
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-buttons">
+                    <button id="btnConnect" class="btn-connect">Connect</button>
+                    <button id="btnDisconnect" class="btn-disconnect">Disconnect</button>
+                    <button id="btnReconnect" class="btn-reconnect">Reconnect</button>
+                </div>
+                <div class="settings-status">
+                    <p>Status: <span id="connectionStatus">Initializing...</span></p>
+                    <p>Mode: <span id="connectionMode">--</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <!-- Control Panel (Left) -->
+            <div class="control-panel">
+                <h2>Control Panel</h2>
+                
+                <div class="directional-controls">
+                    <h3>Movement</h3>
+                    <div class="arrow-pad">
+                        <button id="btnForward" class="arrow-btn arrow-up" title="Move Forward">↑</button>
+                        <div class="arrow-row">
+                            <button id="btnLeft" class="arrow-btn arrow-left" title="Turn Left">←</button>
+                            <span class="arrow-center">Control</span>
+                            <button id="btnRight" class="arrow-btn arrow-right" title="Turn Right">→</button>
+                        </div>
+                        <button id="btnBackward" class="arrow-btn arrow-down" title="Move Backward">↓</button>
+                    </div>
+                </div>
+
+                <div class="numeric-inputs">
+                    <h3>Parameters</h3>
+                    <div class="input-group">
+                        <label for="distance">Distance (m):</label>
+                        <input type="number" id="distance" value="1" step="0.1" min="0">
+                    </div>
+                    <div class="input-group">
+                        <label for="duration">Duration (s):</label>
+                        <input type="range" id="duration" value="2" min="0.1" max="10" step="0.1">
+                        <span id="durationDisplay">2.0s</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="power">Power/Speed:</label>
+                        <input type="range" id="power" value="50" min="0" max="100" step="5">
+                        <span id="powerDisplay">50%</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="angle">Angle (°):</label>
+                        <input type="number" id="angle" value="45" step="1" min="0" max="360">
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="btnExecute" class="btn-execute">Execute Command</button>
+                    <button id="btnStop" class="btn-stop">⚠ STOP</button>
+                    <button id="btnStatus" class="btn-status">Request Status</button>
+                </div>
+            </div>
+
+            <!-- History & Status Panel (Right) -->
+            <div class="history-panel">
+                <h2>Status & History</h2>
+                
+                <div class="status-section">
+                    <h3>Robot Status</h3>
+                    <div id="statusDisplay" class="status-display">
+                        <p>Battery: <span id="batteryLevel">--</span>%</p>
+                        <p>Position: <span id="positionDisplay">--</span></p>
+                        <p>Last Update: <span id="lastUpdate">Never</span></p>
+                    </div>
+                </div>
+
+                <div class="history-section">
+                    <h3>Command History</h3>
+                    <div id="commandLog" class="command-log">
+                        <p class="log-empty">No commands executed yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/get_script/robot-control.js"></script>
+    <script src="/get_script/command-history.js"></script>
+    <script src="/get_script/connection-config.js"></script>
+</body>
+</html>

@@ -1,7 +1,8 @@
+// Linux-only cleanup
 #include "MySocket.h"
-#include <WS2tcpip.h>
 #include <format>
 #include <stdexcept>
+#include <cstring>
 using namespace coil::protocol::constants;
 namespace coil::protocol
 {
@@ -25,8 +26,8 @@ namespace coil::protocol
 		}	
 		
 		// Initialize TCP connection status to false
-		this->ConnectionSocket = INVALID_SOCKET;		// Start in invalid state to prevent some destructor related bugs
-		this->WelcomeSocket = INVALID_SOCKET;			// Start in invalid state to prevent some destructor related bugs
+		this->ConnectionSocket = INVALID_SOCKET;
+		this->WelcomeSocket = INVALID_SOCKET;
 		this->ConnType = connectionType;
 		this->SockType = socketType;
 		this->bTCPConnected = false;
@@ -37,21 +38,7 @@ namespace coil::protocol
 
 		// Setup internal buffer for receiving data - allocate memory for the buffer based on the specified buffer size.
 		this->buffer = new char[this->MaxSize];
-		memset(buffer, 0, MaxSize);  // zero-initialize (zero-out the buffer to ensure it starts in a known state)
-
-		// Platform-specific initialization
-		#ifdef _WIN32
-			WSADATA wsaData;
-			if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) 
-			{
-				// Clean up buffer before throwing
-				delete[] buffer;
-				buffer = nullptr;
-
-				throw std::runtime_error("Failed to initialize WinSock");
-			}
-			this->wsaOwned = true; // Mark that this object is responsible for cleaning up WinSock
-		#endif		
+		memset(buffer, 0, MaxSize);  // zero-initialize (zero-out the buffer to ensure it starts in a known state)		
 			
 		// Create socket (same on both platforms)		
 		// Check if the connection type is TCP or UDP and create the appropriate socket type accordingly.
@@ -66,10 +53,7 @@ namespace coil::protocol
 		{
 			// Clean up before throwing
 			delete[] buffer;
-			buffer = nullptr;
-			#ifdef _WIN32
-				WSACleanup();
-			#endif
+			buffer = nullptr;			
 			throw std::runtime_error("Failed to create socket");
 		}
 
@@ -83,41 +67,28 @@ namespace coil::protocol
 				// Initialize server socket and bind to the specified port
 				SvrAddr.sin_addr.s_addr = INADDR_ANY;
 
-				if (bind(ConnectionSocket, (sockaddr*)&SvrAddr, sizeof(SvrAddr)) == SOCKET_ERROR)
-				{
-					// Clean up everything before throwing
-					#ifdef _WIN32
-						closesocket(ConnectionSocket);
-						WSACleanup();
-					#else
-						close(ConnectionSocket);
-					#endif
-					delete[] buffer;
-					buffer = nullptr;
-					throw std::runtime_error("Failed to bind socket");
-				}
+				   if (bind(ConnectionSocket, (sockaddr*)&SvrAddr, sizeof(SvrAddr)) == SOCKET_ERROR)
+				   {
+					   close(ConnectionSocket);
+					   delete[] buffer;
+					   buffer = nullptr;
+					   throw std::runtime_error("Failed to bind socket");
+				   }
 
 				// IF TCP - Setup the listening socket, but do not call accept yet as that is a blocking call.
 				// We will call accept in the ConnectTCP() method when we want to establish the connection,
 				// which allows us to control when we block waiting for a client to connect.
-				if (ConnType == ConnectionType::TCP) 
-				{
-					if (listen(ConnectionSocket, 1) == SOCKET_ERROR)
-					{
-						// Clean up before throwing
-						#ifdef _WIN32
-							closesocket(ConnectionSocket);
-							WSACleanup();
-						#else
-							close(ConnectionSocket);
-						#endif
-						delete[] buffer;
-						buffer = nullptr;
-						throw std::runtime_error("Failed to listen on socket");
-					}
-
-					WelcomeSocket = ConnectionSocket;
-				}				
+				   if (ConnType == ConnectionType::TCP) 
+				   {
+					   if (listen(ConnectionSocket, 1) == SOCKET_ERROR)
+					   {
+						   close(ConnectionSocket);
+						   delete[] buffer;
+						   buffer = nullptr;
+						   throw std::runtime_error("Failed to listen on socket");
+					   }
+					   WelcomeSocket = ConnectionSocket;
+				   }
 				break;
 
 			case SocketType::CLIENT:
@@ -132,31 +103,15 @@ namespace coil::protocol
 	/// Destructor to clean up resources after the MySocket object is destroyed.
 	/// It ensures that any dynamically allocated memory is freed and that any open sockets are properly closed to prevent resource leaks.
 	/// </summary>
-	MySocket::~MySocket()
-	{
-		delete[] buffer;
-		buffer = nullptr;
-
-		// Windows specific cleanup
-		#ifdef _WIN32
-			if (ConnectionSocket != INVALID_SOCKET) 
-				closesocket(ConnectionSocket);
-			
-			if (WelcomeSocket != INVALID_SOCKET && WelcomeSocket != ConnectionSocket) 
-				closesocket(WelcomeSocket);
-
-			// Check if the wsaOwned flag is true before calling WSACleanup to ensure that we only clean
-			// up WinSock if it was successfully created in the constructor.
-			// Avoids potential issues if the constructor threw an exception before WinSock was initialized.
-			if(this->wsaOwned == true) WSACleanup();
-		#else
-			if (ConnectionSocket != INVALID_SOCKET) 
-				close(ConnectionSocket);
-			
-			if (WelcomeSocket != INVALID_SOCKET && WelcomeSocket != ConnectionSocket) 
-				close(WelcomeSocket);
-		#endif
-	}
+	   MySocket::~MySocket()
+	   {
+		   delete[] buffer;
+		   buffer = nullptr;
+		   if (ConnectionSocket != INVALID_SOCKET) 
+			   close(ConnectionSocket);
+		   if (WelcomeSocket != INVALID_SOCKET && WelcomeSocket != ConnectionSocket) 
+			   close(WelcomeSocket);
+	   }
 	
 	/// <summary>
 	/// Establishes a TCP connection, either by connecting to a server (client mode) or accepting a client connection (server mode).
@@ -194,22 +149,14 @@ namespace coil::protocol
 	/// <summary>
 	/// Disconnects an active TCP connection and releases the associated socket.
 	/// </summary>
-	void MySocket::DisconnectTCP()
-	{
-		if (bTCPConnected == false) throw runtime_error("Not currently connected; unable to disconnect.");
-
-		// Gracefully shutdown the connection (disable send/receive)
-		#ifdef _WIN32
-			shutdown(ConnectionSocket, SD_BOTH);  // Windows: SD_BOTH (2)
-			closesocket(ConnectionSocket);
-		#else
-			shutdown(ConnectionSocket, SHUT_RDWR);  // Linux: SHUT_RDWR
-			close(ConnectionSocket);
-		#endif
-
-		ConnectionSocket = INVALID_SOCKET;  // Mark as invalid
-		bTCPConnected = false;
-	}
+	   void MySocket::DisconnectTCP()
+	   {
+		   if (bTCPConnected == false) throw runtime_error("Not currently connected; unable to disconnect.");
+		   shutdown(ConnectionSocket, SHUT_RDWR);
+		   close(ConnectionSocket);
+		   ConnectionSocket = INVALID_SOCKET;
+		   bTCPConnected = false;
+	   }
 
 	/// <summary>
 	/// Sends data over the socket connection. For TCP, it sends data over the established connection socket.
@@ -232,25 +179,17 @@ namespace coil::protocol
 			if (!bTCPConnected) throw std::runtime_error("Not connected to a TCP peer; unable to send data.");
 
 			// Use send for TCP connections, which sends data over the established connection socket.
-			int bytesSent = send(ConnectionSocket, data, size, 0);
-
-			// Check if the send operation was successful and throw an exception if it fails.
-			if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
-
-			// Double check that the correct number of bytes was sent. If not, throw an exception.
-			if (bytesSent != size) throw std::runtime_error("Partial send occurred");
+			   int bytesSent = send(ConnectionSocket, data, size, 0);
+			   if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
+			   if (bytesSent != size) throw std::runtime_error("Partial send occurred");
 		}
 		else if (this->ConnType == ConnectionType::UDP)
 		{
 			// Send data using sendto for UDP connections, which sends data to the specified address and port
 			// without needing an established connection.
-			int bytesSent = sendto(ConnectionSocket, data, size, 0, (sockaddr*)&SvrAddr, sizeof(SvrAddr));
-
-			// Check if the send operation was successful and throw an exception if it fails.
-			if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
-
-			// Double check that the correct number of bytes was sent. If not, throw an exception.
-			if (bytesSent != size) throw std::runtime_error("Partial send occurred");
+			   int bytesSent = sendto(ConnectionSocket, data, size, 0, (sockaddr*)&SvrAddr, sizeof(SvrAddr));
+			   if (bytesSent == SOCKET_ERROR) throw std::runtime_error("Failed to send data");
+			   if (bytesSent != size) throw std::runtime_error("Partial send occurred");
 		}
 	}
 
@@ -279,56 +218,29 @@ namespace coil::protocol
 			throw std::runtime_error("Only TCP servers can accept connections");
 
 		// Set timeout on the listening socket
-		#ifdef _WIN32
-			// Convert timeoutSeconds to milliseconds
-			DWORD timeout = timeoutSeconds * 1000;  
-
-			// Attempt to set the receive timeout on the WelcomeSocket. If this fails, we throw an exception with an error message.
-			if (setsockopt(WelcomeSocket, SOL_SOCKET, SO_RCVTIMEO,
-				(const char*)&timeout, sizeof(timeout)) == SOCKET_ERROR) 
-			{
-				throw std::runtime_error("Failed to set socket timeout");
-			}
-		#else
-			// Convert timeoutSeconds to timeval structure
-			struct timeval tv;
-			tv.tv_sec = timeoutSeconds;	// Seconds
-			tv.tv_usec = 0;				// No microseconds
-
-			// Attempt to set the receive timeout on the WelcomeSocket. If this fails, we throw an exception with an error message.
-			if (setsockopt(WelcomeSocket, SOL_SOCKET, SO_RCVTIMEO,
-				(const void*)&tv, sizeof(tv)) < 0) 
-			{
-				throw std::runtime_error("Failed to set socket timeout");
-			}
-		#endif
+		   // Convert timeoutSeconds to timeval structure
+		   struct timeval tv;
+		   tv.tv_sec = timeoutSeconds;
+		   tv.tv_usec = 0;
+		   if (setsockopt(WelcomeSocket, SOL_SOCKET, SO_RCVTIMEO,
+			   (const void*)&tv, sizeof(tv)) < 0) 
+		   {
+			   throw std::runtime_error("Failed to set socket timeout");
+		   }
 
 		// Now we call accept, which will block until a client connects or the timeout is reached.		
 		ConnectionSocket = accept(WelcomeSocket, NULL, NULL);
 
 		// If accept returns INVALID_SOCKET, we check if it was due to a timeout or an actual error.
-		if (ConnectionSocket == INVALID_SOCKET) 
-		{
-			// Check if it was a timeout or actual error
-			#ifdef _WIN32
-				// Setup the error code
-				int error = WSAGetLastError();
-
-				// Check if the error was a timeout.
-				if (error == WSAETIMEDOUT) 
-				{
-					return false;  // Timeout - no client connected
-				}
-			#else
-				// Check if the error was a timeout.
-				// On Linux, accept will return -1 and set errno to EWOULDBLOCK or EAGAIN if the timeout is reached.
-				if (errno == EWOULDBLOCK || errno == EAGAIN) 
-				{
-					return false;  // Timeout
-				}
-			#endif
-				throw std::runtime_error("Failed to accept connection");
-		}
+		   if (ConnectionSocket == INVALID_SOCKET) 
+		   {
+			   // On Linux, accept will return -1 and set errno to EWOULDBLOCK or EAGAIN if the timeout is reached.
+			   if (errno == EWOULDBLOCK || errno == EAGAIN) 
+			   {
+				   return false;  // Timeout
+			   }
+			   throw std::runtime_error("Failed to accept connection");
+		   }
 
 		// Return true to indicate that a client has successfully connected within the timeout period.
 		return true; 
@@ -353,22 +265,17 @@ namespace coil::protocol
 	{ 
 
 		// Set timeout if specified (similar to your AcceptConnection code)
-		if (timeoutSeconds > 0) 
-		{
-			#ifdef _WIN32
-						DWORD timeout = timeoutSeconds * 1000;
-						setsockopt(ConnectionSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-			#else
-						struct timeval tv;
-						tv.tv_sec = timeoutSeconds;
-						tv.tv_usec = 0;
-						if (setsockopt(ConnectionSocket, SOL_SOCKET, SO_RCVTIMEO,
-							&tv, sizeof(tv)) < 0)
-						{
-							throw std::runtime_error("Failed to set receive timeout");
-						}
-			#endif
-		}
+		   if (timeoutSeconds > 0) 
+		   {
+			   struct timeval tv;
+			   tv.tv_sec = timeoutSeconds;
+			   tv.tv_usec = 0;
+			   if (setsockopt(ConnectionSocket, SOL_SOCKET, SO_RCVTIMEO,
+				   &tv, sizeof(tv)) < 0)
+			   {
+				   throw std::runtime_error("Failed to set receive timeout");
+			   }
+		   }
 		int bytecount = 0;
 
 		//Check if connection is TCP or UDP
@@ -389,35 +296,20 @@ namespace coil::protocol
 		}
 
 		//errorcheck (check if bytes have been recieved
-		if (bytecount == SOCKET_ERROR)
-		{			
-			#ifdef _WIN32	
-				int err = WSAGetLastError();
-				if (err == WSAEWOULDBLOCK || err == WSAETIMEDOUT) // Check for timeout condition (no data received within the specified timeout period)
-				{
-					return 0; // No data received, return 0 to indicate a timeout
-				}
-				else
-				{
-					throw std::runtime_error(std::format("GetData Error: Socket failure code: {}", err));
-				}
-			#else
-				if (errno == EWOULDBLOCK || errno == EAGAIN)
-				{
-					return 0;  // Timeout
-				}	
-				else
-				{
-					throw std::runtime_error(std::format("GetData Error: Socket failure code: {}", errno));
-				}
-			#endif				
-		}
-		
-		//Copy buffer to recieved memory address
-		errno_t result = memcpy_s(mAddr, bytecount, buffer,	bytecount);
-		if (result != 0) throw std::runtime_error("GetData Error: Failed to copy data to recieved memory address");
-
-		return bytecount; // return the number of bytes written to mAddr
+		   if (bytecount == SOCKET_ERROR)
+		   {
+			   if (errno == EWOULDBLOCK || errno == EAGAIN)
+			   {
+				   return 0;  // Timeout
+			   }   
+			   else
+			   {
+				   throw std::runtime_error(std::format("GetData Error: Socket failure code: {}", errno));
+			   }
+		   }
+		   //Copy buffer to received memory address
+		   memcpy(mAddr, buffer, bytecount);
+		   return bytecount;
 	}
 
 	/// <summary>

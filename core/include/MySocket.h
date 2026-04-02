@@ -2,23 +2,15 @@
 #include <string>
 #include "types.h"
 #include "constants.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+typedef int SocketHandle;
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
 
-// Platform-specific includes - guarded so Linux builds use POSIX sockets
-#ifdef _WIN32
-	#include <WinSock2.h>
-	#include <WS2tcpip.h>
-	#pragma comment(lib, "Ws2_32.lib")
-	typedef SOCKET SocketHandle;
-#else
-	#include <sys/socket.h>
-	#include <netinet/in.h>
-	#include <arpa/inet.h>
-	#include <unistd.h>
-	typedef int SocketHandle;
-	#define INVALID_SOCKET -1
-	#define SOCKET_ERROR -1
-#endif
-
+using SOCKET = SocketHandle; // Compatibility alias for existing SOCKET references
 using namespace std;
 namespace coil::protocol
 {

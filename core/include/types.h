@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 
 namespace coil::protocol
 {
@@ -96,7 +97,7 @@ namespace coil::protocol
 		/// <param name="data">Pointer to the packet body data</param>
 		/// <param name="length">Length of the data buffer (must be at least 13 bytes)</param>
 		/// <returns>Populated RobotTelemetry struct</returns>
-		static RobotTelemetry Deserialize(const unsigned char*, size_t);
+		static RobotTelemetry Deserialize(const unsigned char*, std::size_t);
 			
 
 		/// <summary>

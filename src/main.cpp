@@ -34,14 +34,12 @@ int main()
 		socketMgr = nullptr; // will attempt lazy init in route
 	}
 	std::mutex socketMutex;
-	
-	#warning "THIS IS NEW SERVER BUILD"
 
 	// Main landing page
 	CROW_ROUTE(app, "/")
 	([](crow::response& res)
 	{
-		ifstream file("../public/index.html", ifstream::in);
+		ifstream file("public/index.html", ifstream::in);
 		if(file)
 		{
 			ostringstream fileContents;
@@ -55,7 +53,7 @@ int main()
 		{
 			res.code = 404;
 			res.set_header("Content-Type", "text/plain");
-			res.write("Page Not Found AND HERES MY NEW TEXXT");
+			res.write("Page Not Found");
 		}
 		res.end();
 	});
@@ -64,7 +62,7 @@ int main()
 	CROW_ROUTE(app, "/page/<string>")
 	([](crow::request& req, crow::response& res, std::string name)
 	{
-		ifstream file("../public/" + name, ifstream::in);
+		ifstream file("public/" + name, ifstream::in);
 		if(file)
 		{
 			ostringstream fileContents;
@@ -109,7 +107,7 @@ int main()
 		}
 
 		// Attempt to open the requested file in the Styles folder
-		ifstream file("../public/scripts/" + name, ifstream::ios_base::binary);
+		ifstream file("public/scripts/" + name, ifstream::ios_base::binary);
 		
 		// If the file exists, read its contents and send it in the response
 		if(file)
@@ -153,7 +151,7 @@ int main()
 		if((name.substr(name.size() - 4) == ".png" || name.substr(name.size() - 4) == ".jpg" || name.substr(name.size() - 4) == ".jpeg") && name.length() > 5)
 		{
 			// Attempt to open the requested file in the Styles folder
-			ifstream file("../public/images/" + name, ifstream::ios_base::binary);
+				ifstream file("public/images/" + name, ifstream::ios_base::binary);
 			
 			// If the file exists, read its contents and send it in the response
 			if(file)
@@ -222,7 +220,7 @@ int main()
 		}
 
 		// Attempt to open the requested file in the Styles folder
-		ifstream file("../public/styles/" + name, ifstream::in);
+		ifstream file("public/styles/" + name, ifstream::in);
 		
 		// If the file exists, read its contents and send it in the response
 		if(file)

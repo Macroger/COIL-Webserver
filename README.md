@@ -30,7 +30,6 @@ A modular C++ webserver project for the COIL (Collaborative Online Integrated Le
 
 ## Running
 - On Linux: `./COIL_WEBSERVER`
-- On Windows: `COIL_WEBSERVER.exe`
 - Or use `run-server.sh` (Linux only)
 
 ## Requirements

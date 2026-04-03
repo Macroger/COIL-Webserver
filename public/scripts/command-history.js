@@ -1,6 +1,11 @@
 /**
  * Command History Module
  * Manages and displays command history log
+ *
+ * Behavior changes:
+ * - Renders oldest-to-newest so newest entries appear at the bottom.
+ * - Auto-scrolls only when view is near the bottom; otherwise marks the log as "stale".
+ * - Shows a floating "Go to latest" button when not at the bottom.
  */
 
 class CommandHistory {
@@ -9,10 +14,16 @@ class CommandHistory {
         this.maxEntries = 50; // Keep last 50 commands
         this.logElement = document.getElementById('commandLog');
         this.btnHistory = document.getElementById('btnHistory');
-        this.historyPanel = document.getElementById('historyPanel');
+        // prefer an explicit id, fall back to the panel class
+        this.historyPanel = document.getElementById('historyPanel') || document.querySelector('.history-panel');
         this.btnCloseHistory = document.getElementById('btnCloseHistory');
         this.btnExportHistoryEl = document.getElementById('btnExportHistory');
         this.btnClearHistoryEl = document.getElementById('btnClearHistory');
+
+        // Create goto button and attach scroll handler early
+        this.createGotoButton();
+        this.attachScrollHandler();
+
         this.loadHistory();
         this.attachUI();
     }
@@ -67,6 +78,11 @@ class CommandHistory {
      * Render history to DOM
      */
     renderHistory() {
+        if (!this.logElement) return;
+
+        // remember if view was near bottom so we can preserve auto-scroll
+        const nearBottomBefore = (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 20);
+
         // Clear current log
         this.logElement.innerHTML = '';
 
@@ -75,14 +91,29 @@ class CommandHistory {
             return;
         }
 
-        // Render each entry (reverse order - newest first)
-        [...this.history].reverse().forEach(entry => {
+        // Render entries oldest-first so newest appear at the bottom
+        this.history.forEach(entry => {
             const logEntry = this.createLogEntry(entry);
             this.logElement.appendChild(logEntry);
         });
 
-        // Auto scroll to bottom
-        this.logElement.scrollTop = this.logElement.scrollHeight;
+        // Re-attach goto button since we clear innerHTML above which removes it
+        if (this.gotoBtn) {
+            const target = this.historyPanel || this.logElement;
+            // ensure button is appended to the non-scrolling container so it doesn't scroll with the log
+            target.appendChild(this.gotoBtn);
+            // ensure it overlays by setting a high z-index
+            this.gotoBtn.style.zIndex = '999';
+        }
+
+        // If view was near bottom before update, auto-scroll to bottom; otherwise mark as stale
+        if (nearBottomBefore) {
+            this.logElement.scrollTop = this.logElement.scrollHeight;
+        } else {
+            this.logElement.classList.add('stale');
+            if (this.gotoBtn) this.gotoBtn.style.display = 'block';
+        }
+        this.updateStaleState();
     }
 
     /**
@@ -92,8 +123,8 @@ class CommandHistory {
         const div = document.createElement('div');
         div.className = 'log-entry';
 
-        const timestamp = entry.timestamp instanceof Date 
-            ? entry.timestamp.toLocaleTimeString() 
+        const timestamp = entry.timestamp instanceof Date
+            ? entry.timestamp.toLocaleTimeString()
             : new Date(entry.timestamp).toLocaleTimeString();
 
         let commandText = '';
@@ -202,8 +233,8 @@ class CommandHistory {
     exportAsCSV() {
         let csv = 'Timestamp,Type,Command,Status\n';
         this.history.forEach(entry => {
-            const timestamp = entry.timestamp instanceof Date 
-                ? entry.timestamp.toISOString() 
+            const timestamp = entry.timestamp instanceof Date
+                ? entry.timestamp.toISOString()
                 : entry.timestamp;
             const type = entry.type;
             const command = this.commandToString(entry);
@@ -252,6 +283,45 @@ class CommandHistory {
             turnCount: this.history.filter(e => e.type === 'TURN').length,
             stopCount: this.history.filter(e => e.type === 'STOP').length
         };
+    }
+
+    /* --- Stale indicator and goto button --- */
+    createGotoButton() {
+        if (!this.logElement) return;
+        const btn = document.createElement('button');
+        btn.className = 'goto-latest';
+        btn.textContent = 'Go to latest';
+        btn.title = 'Go to latest message';
+        btn.style.display = 'none';
+        btn.addEventListener('click', () => {
+            this.logElement.scrollTop = this.logElement.scrollHeight;
+            this.logElement.classList.remove('stale');
+            btn.style.display = 'none';
+        });
+        this.gotoBtn = btn;
+        // Append the button inside the scrolling log so we can use `position: sticky`
+        // Sticky keeps it visible at the bottom of the scroll viewport while not scrolling with content.
+        this.logElement.appendChild(btn);
+    }
+
+    attachScrollHandler() {
+        if (!this.logElement) return;
+        this.logElement.addEventListener('scroll', () => {
+            this.updateStaleState();
+        }, { passive: true });
+    }
+
+    updateStaleState() {
+        if (!this.logElement) return;
+        const distance = this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight);
+        const atBottom = distance <= 20;
+        if (atBottom) {
+            this.logElement.classList.remove('stale');
+            if (this.gotoBtn) this.gotoBtn.style.display = 'none';
+        } else {
+            this.logElement.classList.add('stale');
+            if (this.gotoBtn) this.gotoBtn.style.display = 'block';
+        }
     }
 }
 

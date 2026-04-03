@@ -60,10 +60,12 @@
                         </select>
                     </div>
                 </div>
-                <div class="settings-buttons">
-                    <button id="btnConnect" class="btn-connect">Connect</button>
-                    <button id="btnDisconnect" class="btn-disconnect">Disconnect</button>
-                    <button id="btnReconnect" class="btn-reconnect">Reconnect</button>
+                <div class="connection-card">
+                    <div class="connection-actions">
+                        <button id="btnConnect" class="btn btn-primary btn-connect">Connect</button>
+                        <button id="btnDisconnect" class="btn btn-ghost btn-disconnect">Disconnect</button>
+                    </div>
+                    <div class="connection-hint">Tip: use TCP for reliable control; UDP for low-latency telemetry.</div>
                 </div>
                 <div class="settings-status">
                     <p>Status: <span id="connectionStatus">Initializing...</span></p>
@@ -83,6 +85,15 @@
                 </div>
                 <div class="status-bar" id="statusBar">
                     <p class="log-empty">No telemetry data received yet.</p>
+                </div>
+
+                <!-- Connection card inside telemetry widget -->
+                <div class="connection-card telemetry-connection-card" style="margin-top:12px;">
+                    <div class="connection-actions" style="justify-content:center;">
+                        <button id="btnConnectPersist" class="btn btn-primary btn-connect">Connect</button>
+                        <button id="btnDisconnectPersist" class="btn btn-ghost btn-disconnect">Disconnect</button>
+                    </div>
+                    <div class="connection-hint">Quick connect (telemetry)</div>
                 </div>
             </div>
         </div>
@@ -106,6 +117,7 @@
             <!-- Control Panel (Left) -->
             <div class="control-panel">
                 <h2>Control Panel</h2>
+                
                 
                 <div class="directional-controls">
                     <h3>Movement</h3>
@@ -145,14 +157,31 @@
             <div class="history-panel">
                 <h2>Status & History</h2>
                 
+                <div class="status-cards" id="statusCards">
+                    <div id="statusCardConnection" class="status-small-card">
+                        <div class="label">Connection</div>
+                        <div class="value">--</div>
+                    </div>
+                    <div id="statusCardMode" class="status-small-card">
+                        <div class="label">Mode</div>
+                        <div class="value">--</div>
+                    </div>
+                    <div id="statusCardLast" class="status-small-card">
+                        <div class="label">Last Update</div>
+                        <div class="value">--</div>
+                    </div>
+                </div>
+
                 <div class="history-section">
-                    <h3>Command History</h3>
+                    <div class="history-header">
+                        <h3>Command History</h3>
+                        <div class="history-actions">
+                            <button id="btnExportHistory" class="btn btn-ghost btn-small">Export JSON</button>
+                            <button id="btnClearHistory" class="btn btn-ghost btn-small">Clear History</button>
+                        </div>
+                    </div>
                     <div id="commandLog" class="command-log">
                         <p class="log-empty">No commands executed yet</p>
-                    </div>
-                    <div class="settings-buttons">
-                        <button id="btnExportHistory" class="btn-export-history">Export JSON</button>
-                        <button id="btnClearHistory" class="btn-clear-history">Clear History</button>
                     </div>
                 </div>
             </div>

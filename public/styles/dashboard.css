@@ -727,6 +727,15 @@ select:focus {
     max-height: 700px;
 }
 
+/* Force console to a reasonable max height inside the console panel so it becomes scrollable */
+#consolePanel .comm-console {
+    max-height: 320px;
+    min-height: 180px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    width: 100%;
+}
+
 @media (max-width: 640px) {
     .dashboard-header h1 {
         font-size: 20px;

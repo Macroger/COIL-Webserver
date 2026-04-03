@@ -9,35 +9,36 @@
 #include <ctime>
 #include <memory>
 #include <mutex>
+#include <csignal>
+#include <cstdlib>
 #include "MySocket.h"
 #include "pktdef.h"
 
 using namespace std;
 
+// Signal handler to restore terminal state and exit cleanly
+static void restore_and_exit_handler(int sig)
+{
+	::system("stty sane > /dev/null 2>&1");
+	std::_Exit(128 + sig);
+}
+
 int main()
 {
 	crow::SimpleApp app;
+	// Restore terminal state on SIGINT/SIGTERM to avoid leaving the
+	// user's tty in a weird state if the server is interrupted.
+	std::signal(SIGINT, restore_and_exit_handler);
+	std::signal(SIGTERM, restore_and_exit_handler);
     
 	// Shared socket manager and mutex for thread-safe use in route handlers
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
-	try {
-		socketMgr = std::make_shared<coil::protocol::MySocket>(
-			coil::protocol::SocketType::CLIENT,
-			coil::protocol::ConnectionType::TCP,
-			23501,
-			coil::protocol::constants::DEFAULT_SIZE,
-			std::string("127.0.0.1")
-		);
-	}
-	catch (const std::exception &e) {
-		std::cerr << "Warning: MySocket init failed: " << e.what() << std::endl;
-		socketMgr = nullptr; // will attempt lazy init in route
-	}
 	std::mutex socketMutex;
 
-	// Main landing page
+	// Command and Control GUI for robot - serves the main page of the web interface, which is a simple HTML page with some
+	// JavaScript to handle user interactions and display telemetry data.
 	CROW_ROUTE(app, "/")
-	([](crow::response& res)
+	([](const crow::request& req, crow::response& res)
 	{
 		ifstream file("public/index.html", ifstream::in);
 		if(file)
@@ -79,8 +80,7 @@ int main()
 			res.write("Page Not Found");
 		}
 
-		// Check if sending the checkout page - if so, 
-		// send a 401 response along with the page.
+		// Check if sending the checkout page - if so, send a 401 response along with the page.
 		if(name == "checkout.html") res.code = 401;
 		
 		res.end();
@@ -256,13 +256,15 @@ int main()
 		res.end();
 	});	
 
-	// Robot Control Endpoints (Mock for prototype)
-	// POST /robot/move - Execute movement command
-	CROW_ROUTE(app, "/robot/move").methods("POST"_method)
+	// PUT /telecommand - Execute movement or sleep command
+	CROW_ROUTE(app, "/robot/telecommand").methods("PUT"_method)
 	([](const crow::request& req, crow::response& res)
 	{
 		auto body = crow::json::load(req.body);
+
+		// Determine which command is being sent
 		
+
 		if (!body)
 		{
 			res.code = 400;
@@ -294,47 +296,9 @@ int main()
 		res.end();
 	});
 
-	// POST /robot/turn - Execute rotation command
-	CROW_ROUTE(app, "/robot/turn").methods("POST"_method)
-	([](const crow::request& req, crow::response& res)
-	{
-		auto body = crow::json::load(req.body);
-		
-		if (!body)
-		{
-			res.code = 400;
-			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Invalid JSON"})");
-		}
-		else
-		{
-			std::string direction = body["direction"].s();
-			double angle = body["angle"].d();
-			double duration = body["duration"].d();
-			int power = static_cast<int>(body["power"].d());
-			
-			// Mock response - TODO: Replace with actual robot communication
-			auto response = crow::json::wvalue();
-			response["status"] = "success";
-			response["command"] = "TURN";
-			response["direction"] = direction;
-			response["angle"] = angle;
-			response["duration"] = duration;
-			response["power"] = power;
-			response["timestamp"] = static_cast<long long>(std::time(nullptr));
-			
-			res.code = 200;
-			res.set_header("Content-Type", "application/json");
-			res.write(response.dump());
-		}
-		
-		res.end();
-	});
-	
-
 	// POST /robot/connect - Configure and connect to robot
 	CROW_ROUTE(app, "/robot/connect").methods("POST"_method)
-	([](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
 	{
 		auto body = crow::json::load(req.body);
 		
@@ -346,16 +310,41 @@ int main()
 		}
 		else
 		{
-			std::string ip = body["ip"].s();
-			int port = static_cast<int>(body["port"].d());
-			std::string mode = body["mode"].s();
+			std::string ip 		= body["ip"].s();
+			int port 			= static_cast<int>(body["port"].d());
+			int mode 			= static_cast<int>(body["mode"].d());
+
+			std::lock_guard<std::mutex> lock(socketMutex);
 			
-			try{
-				if(mode == "TCP")
-				{
-					coil::protocol::MySocket client(coil::protocol::SocketType::CLIENT, coil::protocol::ConnectionType::TCP, 29000, 255, "10.172.41.150");
-					client.ConnectTCP();
+			try
+			{			
+				auto connType = static_cast<coil::protocol::ConnectionType>(mode);
+
+				// then construct the socket using connType:
+				socketMgr = std::make_shared<coil::protocol::MySocket>(
+					coil::protocol::SocketType::CLIENT,
+					connType,
+					port,
+					255,
+					ip
+				);
+
+				// if TCP, call ConnectTCP()
+				if (connType == coil::protocol::ConnectionType::TCP) {
+					socketMgr->ConnectTCP();
 				}
+				
+				auto response = crow::json::wvalue();
+				response["status"] = "success";
+				response["message"] = "Connected to robot";
+				response["ip"] = ip;
+				response["port"] = port;
+				response["mode"] = mode;
+				response["timestamp"] = static_cast<long long>(std::time(nullptr));
+				
+				res.code = 200;
+				res.set_header("Content-Type", "application/json");
+				res.write(response.dump());
 			}
 			catch(const std::exception& e)
 			{
@@ -364,23 +353,7 @@ int main()
 				res.write(R"({"status":"error","message":"Failed to connect to robot: )" + std::string(e.what()) + R"("})");
 				res.end();
 				return;
-			}
-			
-
-
-
-
-			auto response = crow::json::wvalue();
-			response["status"] = "success";
-			response["message"] = "Connected to robot";
-			response["ip"] = ip;
-			response["port"] = port;
-			response["mode"] = mode;
-			response["timestamp"] = static_cast<long long>(std::time(nullptr));
-			
-			res.code = 200;
-			res.set_header("Content-Type", "application/json");
-			res.write(response.dump());
+			}			
 		}
 		
 		res.end();
@@ -388,12 +361,34 @@ int main()
 
 	// POST /robot/disconnect - Disconnect from robot
 	CROW_ROUTE(app, "/robot/disconnect").methods("POST"_method)
-	([](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
 	{
 		auto response = crow::json::wvalue();
 		response["status"] = "success";
 		response["message"] = "Disconnected from robot";
 		response["timestamp"] = static_cast<long long>(std::time(nullptr));
+
+		try
+		{
+			std::lock_guard<std::mutex> lock(socketMutex);
+			if (socketMgr) 
+			{
+				socketMgr->DisconnectTCP();
+			}
+			else 
+			{
+				response["status"] = "error";
+				response["message"] = "No active connection to disconnect";
+			}
+		}
+		catch(const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Failed to disconnect from robot: )" + std::string(e.what()) + R"("})");
+			res.end();
+			return;
+		}
 		
 		res.code = 200;
 		res.set_header("Content-Type", "application/json");
@@ -403,11 +398,11 @@ int main()
 
 	// GET /robot/check-connection - Check current connection status
 	CROW_ROUTE(app, "/robot/check-connection").methods("GET"_method)
-	([](crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
 	{
 		// Mock response - TODO: Replace with actual connection check
 		auto response = crow::json::wvalue();
-		response["connected"] = true;
+		response["connected"] = (socketMgr ? socketMgr->IsConnected() : false);
 		response["status"] = "active";
 		response["message"] = "Connection is active";
 		response["timestamp"] = static_cast<long long>(std::time(nullptr));
@@ -419,16 +414,50 @@ int main()
 	});
 
 	// GET /robot/telemetry - Request robot status/telemetry
-	CROW_ROUTE(app, "/robot/telemetry").methods("GET"_method)
-	([](crow::request& req, crow::response& res)
+	CROW_ROUTE(app, "/robot/telemetry_request").methods("GET"_method)
+	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
 	{
-		// Mock telemetry response - TODO: Replace with actual robot telemetry
 		auto response = crow::json::wvalue();
-		response["battery"] = 85;
-		response["position"] = "(0.0, 0.0)";
-		response["orientation"] = 0.0;
-		response["status"] = "idle";
-		response["timestamp"] = static_cast<long long>(std::time(nullptr));
+		coil::protocol::RobotTelemetry telemetryPkt;
+
+		try
+		{
+			std::lock_guard<std::mutex> lock(socketMutex);
+			if (socketMgr) 
+			{
+				telemetryPkt = socketMgr->GetTelemetry();
+			}
+			else 
+			{
+				response["status"] = "error";
+				response["message"] = "No active connection to get telemetry from robot";
+				res.code = 400;
+				res.set_header("Content-Type", "application/json");
+				res.write(response.dump());
+				res.end();
+				return;
+			}
+
+			// If we successfully got telemetry, populate the response with it
+				response["telemetry"] = {
+					{"last_packet_counter", telemetryPkt.LastPktCounter},
+					{"current_grade", telemetryPkt.CurrentGrade},
+					{"hit_count", telemetryPkt.HitCount},
+					{"heading", telemetryPkt.Heading},
+					{"last_command", telemetryPkt.LastCmd},
+					{"last_command_value", telemetryPkt.LastCmdValue},
+					{"last_command_power", telemetryPkt.LastCmdPower}
+				};
+		}
+		catch(const std::exception& e)
+		{
+			cout << "Error getting telemetry: " << e.what() << endl;
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Failed to get telemetry from robot: )" + std::string(e.what()) + R"("})");
+			res.end();
+			return;
+		}
 		
 		res.code = 200;
 		res.set_header("Content-Type", "application/json");

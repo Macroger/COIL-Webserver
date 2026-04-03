@@ -1,0 +1,10 @@
+build/
+external/
+.git/
+.devcontainer/
+.vscode/
+*.user
+*.swp
+*.log
+COIL_WEBSERVER
+COIL_WEBSERVER.exe

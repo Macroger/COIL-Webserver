@@ -15,6 +15,8 @@
                 <span id="statusIndicator" class="status-dot connected"></span>
                 <span id="statusText">Connected</span>
                 <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
+                <button id="btnTelemetry" class="btn-telemetry" title="Telemetry">📡</button>
+                <button id="btnConsole" class="btn-console" title="Comm Console">💬</button>
             </div>
         </header>
 
@@ -34,8 +36,8 @@
                     <div class="input-group">
                         <label for="socketType">Socket Type:</label>
                         <select id="socketType">
-                            <option value="tcp">TCP</option>
-                            <option value="udp">UDP</option>
+                            <option value="0">TCP</option>
+                            <option value="1">UDP</option>
                         </select>
                     </div>
                 </div>
@@ -48,6 +50,35 @@
                     <p>Status: <span id="connectionStatus">Initializing...</span></p>
                     <p>Mode: <span id="connectionMode">--</span></p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Telemetry Status Bar Pop-down (hidden by default) -->
+        <div id="telemetryPanel" class="settings-panel hidden">
+            <div class="settings-content">
+                <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
+                    <h3 style="margin:0">Telemetry Status</h3>
+                    <div>
+                        <button id="btnStatus" class="btn-status">Request Status</button>
+                    </div>
+                </div>
+                <div class="status-bar" id="statusBar">
+                    <p class="log-empty">No telemetry data received yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comm Console Pop-down (hidden by default) -->
+        <div id="consolePanel" class="settings-panel hidden">
+            <div class="settings-content">
+                <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
+                    <h3 style="margin:0">Comm Console</h3>
+                    <div>
+                        <button id="btnClearConsole" class="btn-clear-console">Clear</button>
+                        <label class="console-auto-scroll" style="margin-left:8px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+                    </div>
+                </div>
+                <div id="commConsole" class="comm-console" aria-live="polite"></div>
             </div>
         </div>
 
@@ -92,10 +123,19 @@
                     </div>
                 </div>
 
-                <div class="action-buttons">
+                    <div class="action-buttons">
                     <button id="btnExecute" class="btn-execute">Execute Command</button>
+                    <button id="btnAddQueue" class="btn-add-queue">Add To Queue</button>
+                    <button id="btnPlayQueue" class="btn-play-queue">Play Queue</button>
+                    <button id="btnClearQueue" class="btn-clear-queue">Clear Queue</button>
                     <button id="btnStop" class="btn-stop">⚠ STOP</button>
-                    <button id="btnStatus" class="btn-status">Request Status</button>
+                </div>
+
+                <div class="queue-display">
+                    <h4>Command Queue</h4>
+                    <div id="commandQueueList" class="command-queue-list">
+                        <p class="log-empty">Queue is empty</p>
+                    </div>
                 </div>
             </div>
 
@@ -103,27 +143,29 @@
             <div class="history-panel">
                 <h2>Status & History</h2>
                 
-                <div class="status-section">
-                    <h3>Robot Status</h3>
-                    <div id="statusDisplay" class="status-display">
-                        <p>Battery: <span id="batteryLevel">--</span>%</p>
-                        <p>Position: <span id="positionDisplay">--</span></p>
-                        <p>Last Update: <span id="lastUpdate">Never</span></p>
-                    </div>
-                </div>
+                <!-- legacy inline status removed; telemetry bar replaces this view -->
 
                 <div class="history-section">
                     <h3>Command History</h3>
                     <div id="commandLog" class="command-log">
                         <p class="log-empty">No commands executed yet</p>
                     </div>
+                    <div class="settings-buttons">
+                        <button id="btnExportHistory" class="btn-export-history">Export JSON</button>
+                        <button id="btnClearHistory" class="btn-clear-history">Clear History</button>
+                    </div>
                 </div>
+                <!-- Comm Console moved into a top panel (consolePanel) -->
             </div>
         </div>
     </div>
 
-    <script src="/get_script/robot-control.js"></script>
+    <!-- (historyPanel removed - command log is now inline in the right column) -->
+
+    
+
     <script src="/get_script/command-history.js"></script>
+    <script src="/get_script/robot-control.js"></script>
     <script src="/get_script/connection-config.js"></script>
 </body>
 </html>

@@ -75,6 +75,13 @@ namespace coil::protocol
 	};
 	#pragma pack(pop) // End of packed structure
 
+	
+	// Compile-time layout guarantees
+	static_assert(sizeof(Header) == 4, "Header size must be exactly 4 bytes");
+	static_assert(offsetof(Header, pktCount) == 0, "pktCount must start at offset 0");
+	static_assert(offsetof(Header, packetLength) == 3, "packetLength must be at offset 3");
+
+
 
 	/// <summary>
 	/// Telemetry data structure received from the robot simulator.
@@ -110,5 +117,10 @@ namespace coil::protocol
 		/// Pretty-prints the telemetry data to console.
 		/// </summary>
 		void Print() const;
+	};
+
+	enum class Endianness : uint8_t {
+		LittleEndian = 0,
+		BigEndian = 1
 	};
 }

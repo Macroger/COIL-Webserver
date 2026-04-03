@@ -3,10 +3,15 @@
  * Handles robot connection settings, IP/Port configuration, and socket type selection
  */
 
+const ConnectionType = Object.freeze({
+    TCP: 0,
+    UDP: 1
+});
+
 class ConnectionConfig {
     constructor() {
         this.isConnected = false;
-        this.currentMode = 'tcp';
+        this.currentMode = ConnectionType.TCP;
         this.currentIP = 'localhost';
         this.currentPort = 5000;
         this.udpHeartbeatTimeout = null;
@@ -57,7 +62,7 @@ class ConnectionConfig {
     async connect() {
         const ip = this.robotIP.value;
         const port = parseInt(this.robotPort.value);
-        const mode = this.socketType.value;
+        const mode = parseInt(this.socketType.value);
 
         if (!ip || !port) {
             alert('Please enter valid IP and Port');
@@ -65,6 +70,16 @@ class ConnectionConfig {
         }
 
         try {
+            // Log outgoing request
+            const outgoingEntry = {
+                type: 'OUTGOING',
+                timestamp: new Date(),
+                request: { ip, port, mode },
+                message: '/robot/connect request sent',
+                success: null
+            };
+            window.commandHistory?.addEntry(outgoingEntry);
+
             const response = await fetch('/robot/connect', {
                 method: 'POST',
                 headers: {
@@ -77,6 +92,8 @@ class ConnectionConfig {
                 })
             });
 
+            const modeLabel = mode === ConnectionType.TCP ? 'TCP' : 'UDP';
+
             if (response.ok) {
                 const data = await response.json();
                 this.currentIP = ip;
@@ -88,22 +105,50 @@ class ConnectionConfig {
                 this.updateConnectionDisplay();
                 this.startHeartbeatMonitor();
 
-                // Log in command history
+                // Log success
                 window.commandHistory?.addEntry({
                     type: 'CONNECTION',
                     timestamp: new Date(),
-                    response: `Connected to ${ip}:${port} (${mode.toUpperCase()})`,
+                    request: { ip, port, mode },
+                    response: data,
+                    message: `Connected to ${ip}:${port} (${modeLabel})`,
                     success: true
                 });
             } else {
+                // Try to capture response body for logging
+                let errText = '';
+                try { errText = await response.text(); } catch (e) { errText = '<unreadable response>'; }
+
                 this.isConnected = false;
                 this.updateConnectionDisplay();
+
+                // Log failure
+                window.commandHistory?.addEntry({
+                    type: 'CONNECTION',
+                    timestamp: new Date(),
+                    request: { ip, port, mode },
+                    response: errText,
+                    message: `Failed to connect to ${ip}:${port} (${modeLabel})`,
+                    success: false
+                });
+
                 alert('Failed to connect to robot');
             }
         } catch (error) {
             console.error('Connection error:', error);
             this.isConnected = false;
             this.updateConnectionDisplay();
+
+            // Log exception
+            window.commandHistory?.addEntry({
+                type: 'CONNECTION',
+                timestamp: new Date(),
+                request: { ip, port, mode },
+                response: String(error),
+                message: 'Exception while connecting',
+                success: false
+            });
+
             alert('Error: ' + error.message);
         }
     }
@@ -153,7 +198,7 @@ class ConnectionConfig {
      * Called when telemetry is received (for UDP heartbeat monitoring)
      */
     onTelemetryReceived() {
-        if (this.currentMode === 'udp') {
+        if (this.currentMode === ConnectionType.UDP) {
             this.lastHeartbeat = new Date();
             this.updateConnectionDisplay();
         }
@@ -163,7 +208,7 @@ class ConnectionConfig {
      * Start monitoring UDP heartbeat
      */
     startHeartbeatMonitor() {
-        if (this.currentMode === 'tcp') {
+        if (this.currentMode === ConnectionType.TCP) {
             return; // TCP doesn't need heartbeat monitoring
         }
 
@@ -181,7 +226,7 @@ class ConnectionConfig {
      * Check UDP heartbeat status
      */
     checkUDPHeartbeat() {
-        if (!this.isConnected || this.currentMode !== 'udp') {
+        if (!this.isConnected || this.currentMode !== ConnectionType.UDP) {
             return;
         }
 
@@ -207,7 +252,7 @@ class ConnectionConfig {
         const statusText = document.getElementById('statusText');
 
         if (this.isConnected) {
-            if (this.currentMode === 'udp') {
+            if (this.currentMode === ConnectionType.UDP) {
                 const timeSinceLastHeartbeat = this.lastHeartbeat 
                     ? (new Date() - this.lastHeartbeat) / 1000 
                     : 999;
@@ -236,8 +281,9 @@ class ConnectionConfig {
         }
 
         // Update mode display
+        const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : 'UDP';
         this.connectionStatus.textContent = this.isConnected ? 'Connected' : 'Disconnected';
-        this.connectionMode.textContent = `${this.currentIP}:${this.currentPort} (${this.currentMode.toUpperCase()})`;
+        this.connectionMode.textContent = `${this.currentIP}:${this.currentPort} (${modeLabel})`;
     }
 
     /**
@@ -262,10 +308,10 @@ class ConnectionConfig {
                 const config = JSON.parse(saved);
                 this.robotIP.value = config.ip || 'localhost';
                 this.robotPort.value = config.port || 5000;
-                this.socketType.value = config.mode || 'tcp';
+                this.socketType.value = config.mode ?? ConnectionType.TCP;
                 this.currentIP = config.ip || 'localhost';
                 this.currentPort = config.port || 5000;
-                this.currentMode = config.mode || 'tcp';
+                this.currentMode = config.mode ?? ConnectionType.TCP;
             }
         } catch (error) {
             console.warn('Could not load saved config:', error);

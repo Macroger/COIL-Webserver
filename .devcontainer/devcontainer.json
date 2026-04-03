@@ -1,22 +1,26 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/cpp
 {
-	"name": "C++",
+	"name": "COIL Webserver",
 	"build": {
 		"dockerfile": "Dockerfile"
+	},
+
+	// Forward the webserver port so the browser on the host can reach it
+	"forwardPorts": [23500],
+
+	// Clone Crow header library into external/crow if not already present.
+	// ASIO is fetched automatically by CMake FetchContent at build time.
+	"postCreateCommand": "[ -d external/crow ] || git clone --depth 1 https://github.com/CrowCpp/Crow.git external/crow",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools"
+			]
+		}
 	}
-
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
-
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "gcc -v",
-
-	// Configure tool-specific properties.
-	// "customizations": {},
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

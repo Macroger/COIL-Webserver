@@ -123,12 +123,20 @@
                         <p class="log-empty">No commands executed yet</p>
                     </div>
                 </div>
+                <div class="console-section">
+                    <h3>Comm Console</h3>
+                    <div id="commConsole" class="comm-console" aria-live="polite"></div>
+                    <div class="console-controls">
+                        <button id="btnClearConsole" class="btn-clear-console">Clear</button>
+                        <label class="console-auto-scroll"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="/get_script/robot-control.js"></script>
     <script src="/get_script/command-history.js"></script>
+    <script src="/get_script/robot-control.js"></script>
     <script src="/get_script/connection-config.js"></script>
 </body>
 </html>

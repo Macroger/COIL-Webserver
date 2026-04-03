@@ -577,7 +577,7 @@ namespace coil::protocol
 		return bTCPConnected;
 	}
 
-	coil::protocol::RobotTelemetry MySocket::GetTelemetry()
+	RobotTelemetry MySocket::GetTelemetry()
 	{
 		// Check if in TCP mode and connected before attempting to get data
 		if (this->ConnType == ConnectionType::TCP)
@@ -588,7 +588,7 @@ namespace coil::protocol
 	
 		// Build minimal ping packet
 		coil::protocol::PktDef pkt;
-		pkt.SetPktCount(packetSentCount);
+		pkt.SetPktCount(packetSentCount +1); // Set packet count to one more than the number of packets we've sent so far, to ensure a unique packet count for this telemetry request.
 		pkt.SetCmd(coil::protocol::CmdType::RESPONSE);
 
 		const char* out = pkt.GenPacket();

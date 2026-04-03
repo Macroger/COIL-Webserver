@@ -18,7 +18,19 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 # --------------------------
 # Dependencies
 # --------------------------
-find_package(Boost REQUIRED COMPONENTS system filesystem)
+# Try to find system Boost first; if not present, prefer a vendored copy under external/boost
+find_package(Boost COMPONENTS system filesystem)
+if(NOT Boost_FOUND)
+  message(STATUS "System Boost not found; checking for vendored Boost in external/boost")
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/boost")
+    set(Boost_NO_SYSTEM_PATHS OFF)
+    find_package(Boost REQUIRED COMPONENTS system filesystem HINTS "${CMAKE_CURRENT_SOURCE_DIR}/external/boost" PATHS "${CMAKE_CURRENT_SOURCE_DIR}/external/boost")
+    if(Boost_FOUND)
+      message(STATUS "Using vendored Boost from ${CMAKE_CURRENT_SOURCE_DIR}/external/boost")
+    endif()
+  endif()
+endif()
+
 find_package(Threads REQUIRED)
 
 include(FetchContent)
@@ -82,10 +94,19 @@ FetchContent_Declare(
 
 FetchContent_Populate(asio)
 
+# Allow using a vendored copy under external/asio/include to avoid network fetches.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/include")
+  set(asio_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/include")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/asio/include")
+  set(asio_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/asio/include")
+else()
+  set(asio_include_dir "${asio_SOURCE_DIR}/asio/include")
+endif()
+
 target_include_directories(
   COIL_WEBSERVER
   PRIVATE
-    ${asio_SOURCE_DIR}/asio/include
+    ${asio_include_dir}
 )
 
 target_compile_definitions(

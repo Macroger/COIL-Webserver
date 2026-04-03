@@ -280,6 +280,29 @@ button {
     box-shadow: 0 5px 20px rgba(59, 130, 246, 0.4);
 }
 
+/* Spinner for status button when loading */
+.btn-status.loading {
+    position: relative;
+}
+.btn-status.loading::after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.6);
+    border-top-color: white;
+    border-radius: 50%;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: translateY(-50%) rotate(0deg); }
+    to   { transform: translateY(-50%) rotate(360deg); }
+}
+
 /* History & Status Panel */
 .history-panel {
     padding: 30px;
@@ -334,6 +357,8 @@ button {
     border-radius: 6px;
     padding: 15px;
     overflow-y: auto;
+    /* Limit visible command history to ~8 entries; allow scrolling for the rest */
+    max-height: 440px;
     font-family: 'Courier New', monospace;
     font-size: 12px;
 }
@@ -634,6 +659,32 @@ select:focus {
     .history-panel {
         padding: 15px;
     }
+
+    .comm-console {
+        background: #0b0b0b;
+        color: #e6e6e6;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 8px;
+        height: 200px;
+        overflow-y: auto;
+        border-radius: 4px;
+        border: 1px solid #222;
+        white-space: pre-wrap;
+    }
+
+    .console-controls {
+        margin-top: 8px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .btn-clear-console {
+        padding: 6px 10px;
+    }
+
+    .console-auto-scroll input { margin-right: 6px; }
 
     .dashboard-header {
         padding: 15px;

@@ -123,7 +123,12 @@ class CommandHistory {
         try {
             const stored = localStorage.getItem('robotCommandHistory');
             if (stored) {
-                this.history = JSON.parse(stored);
+                this.history = JSON.parse(stored) || [];
+                // Enforce maxEntries in case stored history is larger than current limit
+                if (this.history.length > this.maxEntries) {
+                    this.history = this.history.slice(-this.maxEntries);
+                    this.saveHistory();
+                }
                 this.renderHistory();
             }
         } catch (error) {

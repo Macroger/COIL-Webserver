@@ -33,6 +33,7 @@ namespace coil::protocol
 	{
 		return static_cast<Drive>(LastCmd);
 	}
+	
 
 	void RobotTelemetry::Print() const
 	{

@@ -1,13 +1,15 @@
 #include "pktdef.h"
-#include <cstring> 
+#include <cstring>
 #include <string>
 #include <bit>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
+#include <cstdio>
 using namespace coil::protocol::constants;
+
 namespace coil::protocol
-{
+{	
 	/// <summary>
 	/// Constructor for PktDef class that initializes the packet header, body, CRC, and raw buffer to default values.
 	/// </summary>
@@ -24,15 +26,13 @@ namespace coil::protocol
 	/// <exception cref="std::runtime_error">
 	/// Thrown when CRC validation fails or header validation fails.
 	/// </exception>
-	PktDef::PktDef(const char* rawData, int bufferSize)
+	PktDef::PktDef(const char* rawData, int bufferSize, protocol::Endianness endianness)
 	{
 		// Basic validation checks to ensure we have enough data for at least a header and CRC, and that the rawData pointer is not null.
 		if (bufferSize < MIN_PKT_SIZE)throw std::invalid_argument("Buffer too small for valid packet");
 		if (rawData == nullptr) throw std::invalid_argument("rawData cannot be null");
 
-		// No-secure memcpy used on POSIX; sizes are validated above
-
-		// Initialize rawBuffer to nullptr as it isn't used until serializing a packet for transmission
+		// Initialize rawBuffer to nullptr
 		rawBuffer = nullptr;
 
 		// Extract CRC directly from last byte
@@ -63,8 +63,18 @@ namespace coil::protocol
 		}
 
 		// CRC passed - now deserialize the header
-		// Copy header
-		std::memcpy(&pktHeader, rawData, HEADER_SIZE);
+		// Diagnostic: dump the received raw packet bytes for debugging
+		DumpHex("Received packet", rawData, bufferSize);
+		
+		// store chosen wire order
+		this->endianness = endianness;
+
+		// Pointer to the raw bytes we received on the wire, interpreted as a byte array.
+    	const uint8_t* dataPtr = reinterpret_cast<const uint8_t*>(rawData);
+		uint8_t headerBytes[HEADER_SIZE];
+
+		std::memcpy(headerBytes, dataPtr, HEADER_SIZE);
+		ParseHeaderBytes(headerBytes, pktHeader, this->endianness);	
 
 		/* 
 			Validate buffer has enough space for claimed body length - if not this would indicate a malformed packet
@@ -103,6 +113,11 @@ namespace coil::protocol
 
 			// Copy the data into the packet body
 			std::memcpy(pktBody, pktBodyPtr, static_cast<size_t>(packetBodyLength));
+
+			// Pretty print the body in human readable strings for debugging
+			std::string bodyStr(pktBody, packetBodyLength);
+			std::printf("Packet body (%d bytes): %s\n", packetBodyLength, bodyStr.c_str());
+			
 		}
 		else
 		{
@@ -306,35 +321,33 @@ namespace coil::protocol
 	void PktDef::CalcCRC()
 	{
 		// Ensure packet length is set if not already
-		if (pktHeader.packetLength == 0 && pktBody == nullptr) {
+		if (pktHeader.packetLength == 0 && pktBody == nullptr) 
 			pktHeader.packetLength = MIN_PKT_SIZE;
-		}
 
 		// count every BIT set to '1' in header & body
 		int bitCount = 0;
 
 		//1. Count bits in entire 4-byte Header (includes PktCount, Flags, Padding and length)
-		const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(&pktHeader);
-		for (size_t i = 0; i < constants::HEADER_SIZE; i++)
+		// Build header bytes according to endianness and count bits from those bytes
+		uint8_t headerBytes[HEADER_SIZE];
+		BuildHeaderBytes(pktHeader, this->endianness, headerBytes);
+		for (size_t i = 0; i < HEADER_SIZE; i++)
 		{
-			bitCount += std::popcount(headerPtr[i]);
+			bitCount += std::popcount(headerBytes[i]);
 		}
 
 		//2. Count bits in the body
-		if (pktBody != nullptr && pktHeader.packetLength > constants::MIN_PKT_SIZE)
+		if (pktBody != nullptr && pktHeader.packetLength > MIN_PKT_SIZE)
 		{
-			int bodySize = pktHeader.packetLength - constants::MIN_PKT_SIZE;
+			int bodySize = pktHeader.packetLength - MIN_PKT_SIZE;
 			for (int i = 0; i < bodySize; i++)
 			{
 				bitCount += std::popcount(static_cast<uint8_t>(pktBody[i]));
 			}
-
 		}
 
 		//3. store the result
-
 		pktCRC = static_cast<uint8_t>(bitCount & 0xFF);
-
 	}
 
 	/// <summary>
@@ -369,11 +382,15 @@ namespace coil::protocol
 		Header headerCopy = pktHeader;
 		headerCopy.packetLength = actualPacketLength;
 
+		// compute CRC using pktHeader + pktBody
+		CalcCRC();
+
 		// Pointer to keep track of where we are (which element) in the buffer
 		char* writePtr = rawBuffer; 
 
-		// Copy the header into the buffer
-		std::memcpy(writePtr, &headerCopy, HEADER_SIZE);
+		uint8_t headerBytes[HEADER_SIZE];
+    	BuildHeaderBytes(headerCopy, this->endianness, headerBytes);
+		std::memcpy(writePtr, headerBytes, HEADER_SIZE);
 
 		// Move pointer past header
 		writePtr += HEADER_SIZE; 
@@ -381,16 +398,15 @@ namespace coil::protocol
 		// Check if the packet has a body, and if so copy the body data into the buffer - provide remaining buffer size to ensure no overrun can occur.
 		if (pktBody != nullptr && actualPacketLength > MIN_PKT_SIZE)
 		{	
-			uint8_t remainingSize = actualPacketLength - HEADER_SIZE;
-			std::memcpy(writePtr, pktBody, static_cast<size_t>(packetBodyLength));
-
-			// Advance the pointer past the body
-			writePtr += packetBodyLength;
-
+			std::memcpy(writePtr, pktBody, static_cast<size_t>(packetBodyLength));			
+			writePtr += packetBodyLength; // Advance the pointer past the body
 		}
 
 		//3. Place CRC at the last byte
 		*writePtr = pktCRC;
+
+		// Diagnostic: dump the generated raw packet bytes for debugging
+		DumpHex("Sending packet", rawBuffer, actualPacketLength);
 
 		return rawBuffer;  // Return const pointer to internal buffer
 	}
@@ -453,6 +469,110 @@ namespace coil::protocol
 		}
 
 		return errorMsg;
+	}
+
+	// Replace/insert these implementations in pktdef.cpp (they include expanded, self-documenting comments)
+
+	// Read a 16-bit unsigned integer from two packet bytes using the given packet order.
+	// - `bytes` points to two bytes in packet order.
+	// - `order` selects whether the first byte is the high (BigEndian) or low (LittleEndian) byte.
+	// Returns the reconstructed uint16_t value.
+	// No heap allocations or exceptions; safe to mark noexcept.
+	uint16_t PktDef::ReadUint16FromBytes(const uint8_t* bytes, Endianness order) noexcept
+	{
+		// Defensive: caller must supply at least 2 bytes; function is noexcept and doesn't validate pointer.
+		// Interpret packet bytes according to requested endianness.
+		if (order == Endianness::BigEndian) 
+		{
+			// Packet format: [ high, low ]
+			return (static_cast<uint16_t>(bytes[0]) << 8) | static_cast<uint16_t>(bytes[1]);
+		} 
+		else 
+		{
+			// Packet format: [ low, high ]
+			return (static_cast<uint16_t>(bytes[1]) << 8) | static_cast<uint16_t>(bytes[0]);
+		}
+	}
+
+	// Write a 16-bit unsigned integer into two packet bytes using the specified packet order.
+	// - `dest` points to two bytes of writable memory.
+	// - `value` is the 16-bit integer to serialize.
+	// - `order` controls whether the high byte goes first (BigEndian) or last (LittleEndian).
+	// No allocations, no exceptions.
+	void PktDef::WriteUint16ToBytes(uint8_t* dest, uint16_t value, Endianness order) noexcept
+	{
+		if (order == Endianness::BigEndian) 
+		{
+			// Packet format: [ high, low ]
+			dest[0] = static_cast<uint8_t>(value >> 8);
+			dest[1] = static_cast<uint8_t>(value & 0xFF);
+		} 
+		else 
+		{
+			// Packet format: [ low, high ]
+			dest[0] = static_cast<uint8_t>(value & 0xFF);
+			dest[1] = static_cast<uint8_t>(value >> 8);
+		}
+	}
+
+	// Build the 4-byte packet header from an in-memory Header struct.
+	// - `hdr`: in-memory header fields (pktCount, bits, padding, packetLength).
+	// - `packetOrder`: how to encode multi-byte fields (pktCount).
+	// - `out[4]`: receives the four packet bytes in order [pktCount_hi/lo, control, packetLength].
+	// Layout notes:
+	//   - bytes 0..1: pktCount (2 bytes) in `packetOrder`.
+	//   - byte 2: control byte (bits: 0=drive,1=status,2=sleep,3=ack, 4..7=padding nibble).
+	//   - byte 3: packetLength (single byte, as per protocol).
+	void PktDef::BuildHeaderBytes(const Header& hdr, Endianness packetOrder, uint8_t out[4]) noexcept
+	{
+		// pktCount -> bytes 0..1 according to packet order
+		WriteUint16ToBytes(out, hdr.pktCount, packetOrder);
+
+		// Compose control byte explicitly from individual bitfields to avoid compiler-dependent bitfield layout
+		uint8_t control = 0;
+		control |= (hdr.driveBit  ? 0x01u : 0u);                  // bit 0
+		control |= (hdr.statusBit ? 0x02u : 0u);                  // bit 1
+		control |= (hdr.sleepBit  ? 0x04u : 0u);                  // bit 2
+		control |= (hdr.ackBit    ? 0x08u : 0u);                  // bit 3
+		control |= static_cast<uint8_t>((hdr.padding & 0x0Fu) << 4); // bits 4..7: 4-bit padding nibble
+
+		out[2] = control;
+
+		// packetLength is a single byte on the wire (no endianness concerns)
+		out[3] = hdr.packetLength;
+	}
+
+	// Parse four packet bytes into an in-memory Header instance.
+	// - `in[4]` contains the packet header bytes in order produced by BuildHeaderBytes.
+	// - `hdrOut` is populated with decoded fields.
+	// This explicitly decodes control bits and pktCount using ReadUint16FromBytes to ensure portability.
+	void PktDef::ParseHeaderBytes(const uint8_t in[4], Header& hdrOut, Endianness packetOrder) noexcept
+	{
+		// pktCount: reconstruct from first two bytes according to packet order
+		hdrOut.pktCount = ReadUint16FromBytes(in, packetOrder);
+
+		// control byte: decode single-bit flags and padding nibble explicitly
+		uint8_t control = in[2];
+		hdrOut.driveBit  = (control & 0x01) ? 1 : 0; // bit 0
+		hdrOut.statusBit = (control & 0x02) ? 1 : 0; // bit 1
+		hdrOut.sleepBit  = (control & 0x04) ? 1 : 0; // bit 2
+		hdrOut.ackBit    = (control & 0x08) ? 1 : 0; // bit 3
+		hdrOut.padding   = static_cast<uint8_t>((control >> 4) & 0x0F); // bits 4..7
+
+		// packetLength: single byte
+		hdrOut.packetLength = in[3];
+	}
+
+	// Debug helper: dump bytes as hex to stderr
+	void PktDef::DumpHex(const char* label, const char* data, int len)
+	{
+		if (label == nullptr) label = "";
+		const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
+		std::fprintf(stderr, "%s: ", label);
+		for (int i = 0; i < len; ++i) {
+			std::fprintf(stderr, "%02X ", bytes[i]);
+		}
+		std::fprintf(stderr, "\n");
 	}
 
 

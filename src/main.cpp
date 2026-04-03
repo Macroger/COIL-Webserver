@@ -9,30 +9,30 @@
 #include <ctime>
 #include <memory>
 #include <mutex>
+#include <csignal>
+#include <cstdlib>
 #include "MySocket.h"
 #include "pktdef.h"
 
 using namespace std;
 
+// Signal handler to restore terminal state and exit cleanly
+static void restore_and_exit_handler(int sig)
+{
+	::system("stty sane > /dev/null 2>&1");
+	std::_Exit(128 + sig);
+}
+
 int main()
 {
 	crow::SimpleApp app;
+	// Restore terminal state on SIGINT/SIGTERM to avoid leaving the
+	// user's tty in a weird state if the server is interrupted.
+	std::signal(SIGINT, restore_and_exit_handler);
+	std::signal(SIGTERM, restore_and_exit_handler);
     
 	// Shared socket manager and mutex for thread-safe use in route handlers
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
-	// try {
-	// 	socketMgr = std::make_shared<coil::protocol::MySocket>(
-	// 		coil::protocol::SocketType::CLIENT,
-	// 		coil::protocol::ConnectionType::TCP,
-	// 		23501,
-	// 		coil::protocol::constants::DEFAULT_SIZE,
-	// 		std::string("127.0.0.1")
-	// 	);
-	// }
-	// catch (const std::exception &e) {
-	// 	std::cerr << "Warning: MySocket init failed: " << e.what() << std::endl;
-	// 	socketMgr = nullptr; // will attempt lazy init in route
-	// }
 	std::mutex socketMutex;
 
 	// Command and Control GUI for robot - serves the main page of the web interface, which is a simple HTML page with some
@@ -263,6 +263,7 @@ int main()
 		auto body = crow::json::load(req.body);
 
 		// Determine which command is being sent
+		
 
 		if (!body)
 		{
@@ -430,6 +431,11 @@ int main()
 			{
 				response["status"] = "error";
 				response["message"] = "No active connection to get telemetry from robot";
+				res.code = 400;
+				res.set_header("Content-Type", "application/json");
+				res.write(response.dump());
+				res.end();
+				return;
 			}
 
 			// If we successfully got telemetry, populate the response with it

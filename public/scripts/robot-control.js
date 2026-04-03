@@ -39,10 +39,15 @@ class RobotController {
         this.currentGrade = document.getElementById('currentGrade');
         this.hitCount = document.getElementById('hitCount');
         this.heading = document.getElementById('heading');
-        this.lastCommand = document.getElementById('lastCommand');
+        this.lastCommandElem = document.getElementById('lastCommand');
         this.lastCommandValue = document.getElementById('lastCommandValue');
         this.lastCommandPower = document.getElementById('lastCommandPower');
         this.lastUpdate = document.getElementById('lastUpdate');
+
+        // Comm console elements
+        this.commConsole = document.getElementById('commConsole');
+        this.btnClearConsole = document.getElementById('btnClearConsole');
+        this.autoScroll = document.getElementById('autoScroll');
     }
 
     attachEventListeners() {
@@ -72,6 +77,10 @@ class RobotController {
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+
+        // Console controls
+        if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
+        if (this.autoScroll) this.autoScroll.addEventListener('change', () => {});
     }
 
     /**
@@ -150,6 +159,13 @@ class RobotController {
      * Request robot status update
      */
     async requestStatus() {
+        // indicate request started (visual spinner + disabled)
+        if (this.btnStatus) {
+            this.btnStatus.disabled = true;
+            this.btnStatus.classList.add('loading');
+            this.btnStatus.setAttribute('aria-busy', 'true');
+        }
+        this.appendConsole('GET /robot/telemetry_request -> sending...');
         try {
             const response = await fetch('/robot/telemetry_request', {
                 method: 'GET',
@@ -162,6 +178,7 @@ class RobotController {
                 const body = await response.json();
                 const telemetry = body.telemetry || {};
                 this.updateStatusDisplay(telemetry);
+                this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
 
                 // Log in command history
                 window.commandHistory?.addEntry({
@@ -181,6 +198,7 @@ class RobotController {
             }
         } catch (error) {
             console.error('Status request error:', error);
+            this.appendConsole(`ERROR GET /robot/telemetry_request -> ${error.message}`);
             this.setConnectionStatus(false);
             window.commandHistory?.addEntry({
                 type: 'STATUS_REQUEST',
@@ -188,6 +206,12 @@ class RobotController {
                 response: error.message,
                 success: false
             });
+        } finally {
+            if (this.btnStatus) {
+                this.btnStatus.disabled = false;
+                this.btnStatus.classList.remove('loading');
+                this.btnStatus.removeAttribute('aria-busy');
+            }
         }
     }
 
@@ -221,6 +245,7 @@ class RobotController {
             });
 
             const responseData = await response.json();
+            this.appendConsole(`POST ${endpoint} -> request: ${JSON.stringify(command)} response: ${JSON.stringify(responseData)}`);
 
             if (response.ok) {
                 // Log successful command
@@ -247,6 +272,7 @@ class RobotController {
             this.lastCommand = command;
         } catch (error) {
             console.error('Command execution error:', error);
+            this.appendConsole(`ERROR sending command ${JSON.stringify(command)} -> ${error.message}`);
             window.commandHistory?.addEntry({
                 type: command.type,
                 command: command,
@@ -298,7 +324,7 @@ class RobotController {
         if (status.current_grade !== undefined) this.currentGrade.textContent = status.current_grade;
         if (status.hit_count !== undefined) this.hitCount.textContent = status.hit_count;
         if (status.heading !== undefined) this.heading.textContent = status.heading;
-        if (status.last_command !== undefined) this.lastCommand.textContent = status.last_command;
+        if (status.last_command !== undefined) this.lastCommandElem.textContent = status.last_command;
         if (status.last_command_value !== undefined) this.lastCommandValue.textContent = status.last_command_value;
         if (status.last_command_power !== undefined) this.lastCommandPower.textContent = status.last_command_power;
         this.lastUpdate.textContent = new Date().toLocaleTimeString();
@@ -317,6 +343,41 @@ class RobotController {
             this.statusIndicator.classList.add('disconnected');
             this.statusText.textContent = 'Disconnected';
         }
+    }
+
+    /**
+     * Append a line to the communication console.
+     */
+    appendConsole(msg) {
+        if (!this.commConsole) return;
+        const line = document.createElement('div');
+        line.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
+        this.commConsole.appendChild(line);
+        if (this.autoScroll && this.autoScroll.checked) {
+            this.commConsole.scrollTop = this.commConsole.scrollHeight;
+        }
+    }
+
+    /**
+     * Clear the console contents.
+     */
+    clearConsole() {
+        if (!this.commConsole) return;
+        this.commConsole.innerHTML = '';
+    }
+
+    /**
+     * Show raw packet data (Uint8Array or array of numbers) in hex format.
+     */
+    showRawPacket(bytes) {
+        if (!bytes) return;
+        let arr;
+        if (bytes instanceof Uint8Array) arr = Array.from(bytes);
+        else if (Array.isArray(bytes)) arr = bytes;
+        else return this.appendConsole(String(bytes));
+
+        const hex = arr.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join(' ');
+        this.appendConsole(`RAW: ${hex}`);
     }
 
     /**

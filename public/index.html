@@ -5,18 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Robot Control Dashboard</title>
     <link rel="stylesheet" href="/get_style/dashboard.css">
+    <link rel="stylesheet" href="/get_style/themes.css">
 </head>
 <body>
     <div class="dashboard-container">
         <!-- Header -->
         <header class="dashboard-header">
-            <h1>Robot Control Dashboard</h1>
-            <div class="connection-status">
-                <span id="statusIndicator" class="status-dot connected"></span>
-                <span id="statusText">Connected</span>
-                <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
-                <button id="btnTelemetry" class="btn-telemetry" title="Telemetry">📡</button>
-                <button id="btnConsole" class="btn-console" title="Comm Console">💬</button>
+            <div class="header-left">
+                <div class="theme-picker-wrap">
+                    <span class="theme-label">Theme</span>
+                    <select id="themePicker" class="theme-picker-select" title="Select theme">
+                        <option value="default">Default</option>
+                        <option value="angelic">Angelic</option>
+                        <option value="demonic">Demonic</option>
+                        <option value="industrial">Industrial</option>
+                        <option value="cyberpunk">Cyberpunk</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <h1>Robot Control Dashboard</h1>
+            </div>
+
+            <div class="header-right">
+                <div class="connection-status">
+                    <span id="statusIndicator" class="status-dot connected"></span>
+                    <span id="statusText">Connected</span>
+                    <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
+                    <button id="btnTelemetry" class="btn-telemetry" title="Telemetry">📡</button>
+                    <button id="btnConsole" class="btn-console" title="Raw Message Console">💬</button>
+                </div>
             </div>
         </header>
 
@@ -72,7 +91,7 @@
         <div id="consolePanel" class="settings-panel hidden">
             <div class="settings-content">
                 <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
-                    <h3 style="margin:0">Comm Console</h3>
+                    <h3 style="margin:0">Raw Message Console</h3>
                     <div>
                         <button id="btnClearConsole" class="btn-clear-console">Clear</button>
                         <label class="console-auto-scroll" style="margin-left:8px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
@@ -104,47 +123,28 @@
                 <div class="numeric-inputs">
                     <h3>Parameters</h3>
                     <div class="input-group">
-                        <label for="distance">Distance (m):</label>
-                        <input type="number" id="distance" value="1" step="0.1" min="0">
-                    </div>
-                    <div class="input-group">
                         <label for="duration">Duration (s):</label>
-                        <input type="range" id="duration" value="2" min="0.1" max="10" step="0.1">
-                        <span id="durationDisplay">2.0s</span>
+                        <input type="range" id="duration" value="2" min="1" max="10" step="1">
+                        <span id="durationDisplay">2s</span>
                     </div>
                     <div class="input-group">
-                        <label for="power">Power/Speed:</label>
-                        <input type="range" id="power" value="50" min="0" max="100" step="5">
-                        <span id="powerDisplay">50%</span>
+                        <label for="power">Power:</label>
+                        <input type="range" id="power" value="80" min="80" max="100" step="1">
+                        <span id="powerDisplay">80%</span>
                     </div>
-                    <div class="input-group">
-                        <label for="angle">Angle (°):</label>
-                        <input type="number" id="angle" value="45" step="1" min="0" max="360">
-                    </div>
+                </div>
+                
+                <div class="processing-area">
+                    <div id="processingMessage" class="processing-message hidden" aria-live="polite"></div>
                 </div>
 
-                    <div class="action-buttons">
-                    <button id="btnExecute" class="btn-execute">Execute Command</button>
-                    <button id="btnAddQueue" class="btn-add-queue">Add To Queue</button>
-                    <button id="btnPlayQueue" class="btn-play-queue">Play Queue</button>
-                    <button id="btnClearQueue" class="btn-clear-queue">Clear Queue</button>
-                    <button id="btnStop" class="btn-stop">⚠ STOP</button>
-                </div>
-
-                <div class="queue-display">
-                    <h4>Command Queue</h4>
-                    <div id="commandQueueList" class="command-queue-list">
-                        <p class="log-empty">Queue is empty</p>
-                    </div>
-                </div>
+                
             </div>
 
             <!-- History & Status Panel (Right) -->
             <div class="history-panel">
                 <h2>Status & History</h2>
                 
-                <!-- legacy inline status removed; telemetry bar replaces this view -->
-
                 <div class="history-section">
                     <h3>Command History</h3>
                     <div id="commandLog" class="command-log">
@@ -155,16 +155,12 @@
                         <button id="btnClearHistory" class="btn-clear-history">Clear History</button>
                     </div>
                 </div>
-                <!-- Comm Console moved into a top panel (consolePanel) -->
             </div>
         </div>
     </div>
 
-    <!-- (historyPanel removed - command log is now inline in the right column) -->
-
-    
-
     <script src="/get_script/command-history.js"></script>
+    <script src="/get_script/theme-switcher.js"></script>
     <script src="/get_script/robot-control.js"></script>
     <script src="/get_script/connection-config.js"></script>
 </body>

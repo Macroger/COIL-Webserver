@@ -1,0 +1,93 @@
+/* Theme presets override CSS variables based on [data-theme] attribute on <html> */
+
+/* Angelic - light, pastel, airy */
+:root[data-theme="angelic"] {
+  --bg-top: #f0f9ff;
+  --bg-bottom: #f8fafc;
+  --header-top: #fff7ed;
+  --header-bottom: #fff1f3;
+  --header-border: #e6e0f8;
+  --accent: #7dd3fc; /* sky blue */
+  --accent-2: #c7b8ff; /* soft lavender */
+  --accent-border: rgba(125, 211, 252, 0.12);
+  --surface-bg: #ffffff;
+  --card-bg: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #6b7280;
+  --success: #86efac;
+  --danger: #fb7185;
+  --warning: #fcd34d;
+  --console-bg: #fffdf6;
+  --console-text: #111827;
+  --select-foreground: var(--text-primary);
+  --select-bg: rgba(0,0,0,0.06);
+}
+
+/* Demonic - dark red and ember */
+:root[data-theme="demonic"] {
+  --bg-top: #10060a;
+  --bg-bottom: #2b070b;
+  --header-top: #3b0b0f;
+  --header-bottom: #2a0206;
+  --header-border: #43060a;
+  --accent: #ff3b3b; /* hot red */
+  --accent-2: #ff6f61;
+  --accent-border: rgba(255, 59, 59, 0.12);
+  --surface-bg: #0b0b0b;
+  --card-bg: #0f0b0b;
+  --text-primary: #f8f7f6;
+  --text-muted: #bfb1b1;
+  --success: #4ade80;
+  --danger: #ff2444;
+  --warning: #f59e0b;
+  --console-bg: #050405;
+  --console-text: #ffdede;
+  --select-foreground: #ffffff;
+  --select-bg: rgba(255,255,255,0.06);
+}
+
+/* Industrial - steel, concrete */
+:root[data-theme="industrial"] {
+  --bg-top: #f4f6f8;
+  --bg-bottom: #e9ecef;
+  --header-top: #73777d;
+  --header-bottom: #4b5563;
+  --header-border: #6b7280;
+  --accent: #94a3b8; /* steel blue */
+  --accent-2: #64748b;
+  --accent-border: rgba(148, 163, 184, 0.12);
+  --surface-bg: #ffffff;
+  --card-bg: #f8fafc;
+  --text-primary: #111827;
+  --text-muted: #6b7280;
+  --success: #86efac;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --console-bg: #0b0d0f;
+  --console-text: #e6eef6;
+  --select-foreground: var(--text-primary);
+  --select-bg: rgba(0,0,0,0.06);
+}
+
+/* Cyberpunk - dark with neon accents */
+:root[data-theme="cyberpunk"] {
+  --bg-top: #0b0711;
+  --bg-bottom: #071026;
+  --header-top: #1b0030;
+  --header-bottom: #0e0033;
+  --header-border: #2a0038;
+  --accent: #ff2d95; /* neon magenta */
+  --accent-2: #00e5ff; /* neon cyan */
+  --accent-border: rgba(255, 45, 149, 0.12);
+  --surface-bg: #07060a;
+  --card-bg: #0f0b12;
+  --text-primary: #e6e6e6;
+  --text-muted: #9aa3b2;
+  --success: #00f5a0;
+  --danger: #ff3b3b;
+  --warning: #ff9f43;
+  --console-bg: #05030a;
+  --console-text: #f0f8ff;
+  --select-foreground: #ffffff;
+  --select-bg: rgba(255,255,255,0.04);
+}

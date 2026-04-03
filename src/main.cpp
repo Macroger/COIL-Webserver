@@ -20,7 +20,7 @@ using namespace std;
 static void restore_and_exit_handler(int sig)
 {
 	::system("stty sane > /dev/null 2>&1");
-	std::_Exit(128 + sig);
+	std::exit(128 + sig);
 }
 
 int main()
@@ -35,8 +35,7 @@ int main()
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
 	std::mutex socketMutex;
 
-	// Command and Control GUI for robot - serves the main page of the web interface, which is a simple HTML page with some
-	// JavaScript to handle user interactions and display telemetry data.
+	// Command and Control GUI for robot - serves the main page of the web interface
 	CROW_ROUTE(app, "/")
 	([](const crow::request& req, crow::response& res)
 	{

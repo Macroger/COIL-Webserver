@@ -100,9 +100,13 @@ class CommandHistory {
         let statusText = '';
 
         if (entry.type === 'MOVE') {
-            commandText = `MOVE ${entry.command.direction} ${entry.command.distance}m`;
+            const dir = entry.command?.direction || '';
+            const dist = (entry.command && typeof entry.command.distance !== 'undefined') ? ` ${entry.command.distance}m` : '';
+            commandText = `MOVE ${dir}${dist}`;
         } else if (entry.type === 'TURN') {
-            commandText = `TURN ${entry.command.direction} ${entry.command.angle}°`;
+            const dir = entry.command?.direction || '';
+            const ang = (entry.command && typeof entry.command.angle !== 'undefined') ? ` ${entry.command.angle}°` : '';
+            commandText = `TURN ${dir}${ang}`;
         } else if (entry.type === 'STOP') {
             commandText = 'STOP';
         } else if (entry.type === 'STATUS_REQUEST') {
@@ -221,9 +225,13 @@ class CommandHistory {
      */
     commandToString(entry) {
         if (entry.type === 'MOVE' && entry.command) {
-            return `MOVE ${entry.command.direction} ${entry.command.distance}m`;
+            const dir = entry.command.direction || '';
+            const dist = (typeof entry.command.distance !== 'undefined') ? ` ${entry.command.distance}m` : '';
+            return `MOVE ${dir}${dist}`;
         } else if (entry.type === 'TURN' && entry.command) {
-            return `TURN ${entry.command.direction} ${entry.command.angle}°`;
+            const dir = entry.command.direction || '';
+            const ang = (typeof entry.command.angle !== 'undefined') ? ` ${entry.command.angle}°` : '';
+            return `TURN ${dir}${ang}`;
         } else if (entry.type === 'STOP') {
             return 'STOP';
         } else if (entry.type === 'STATUS_REQUEST') {

@@ -602,16 +602,67 @@ namespace coil::protocol
 		int bytesRead = GetData(recvBuf);
 		if (bytesRead <= 0) throw std::runtime_error("Failed to receive telemetry ACK / NACK response. No data received.");
 
-		// Process response and see if its ACK or NACK
-		PktDef response = PktDef(recvBuf, bytesRead);
-		bool isAck = response.GetAck();
-		if(isAck == false) throw std::runtime_error("Received NACK response to telemetry request, no telemetry data will be sent.");
+		// At this point we may receive ACK and telemetry as two separate recv() calls (UDP or TCP split),
+		// or both packets may be coalesced into a single TCP recv. Handle both cases.
 
+		// Ensure we have enough bytes for a header
+		if (bytesRead < HEADER_SIZE) throw std::runtime_error("Received data too short to contain packet header");
+
+		// Parse first header to find first packet length
+		uint8_t headerBytes[HEADER_SIZE];
+		std::memcpy(headerBytes, recvBuf, HEADER_SIZE);
+		Header firstHdr{};
+		{
+			PktDef helper; // use helper to parse header bytes
+			helper.ParseHeaderBytes(headerBytes, firstHdr, Endianness::LittleEndian);
+		}
+
+		int firstPktLen = firstHdr.packetLength;
+		if (bytesRead < firstPktLen) {
+			// partial read for first packet - attempt to read remaining bytes
+			int remaining = firstPktLen - bytesRead;
+			int more = GetData(recvBuf + bytesRead);
+			if (more <= 0) throw std::runtime_error("Failed to receive full ACK response. No data received.");
+			bytesRead += more;
+			if (bytesRead < firstPktLen) throw std::runtime_error("Failed to receive full ACK response. Incomplete packet.");
+		}
+
+		// Construct PktDef for the first packet only (use exact length)
+		PktDef response = PktDef(recvBuf, firstPktLen);
+		bool isAck = response.GetAck();
+		if (!isAck) throw std::runtime_error("Received NACK response to telemetry request, no telemetry data will be sent.");
+
+		// If we received extra bytes in the same recv, try to parse the telemetry packet(s) from the buffer
+		if (bytesRead > firstPktLen) {
+			int offset = firstPktLen;
+			// We expect the next bytes to start with a header
+			if (bytesRead - offset >= HEADER_SIZE) {
+				std::memcpy(headerBytes, recvBuf + offset, HEADER_SIZE);
+				Header secondHdr{};
+				PktDef helper2;
+				helper2.ParseHeaderBytes(headerBytes, secondHdr, Endianness::LittleEndian);
+				int secondPktLen = secondHdr.packetLength;
+				if (bytesRead - offset >= secondPktLen) {
+					// We have the full telemetry packet in the leftover bytes
+					PktDef telemPkt(recvBuf + offset, secondPktLen);
+					char* bodyPtr = telemPkt.GetBodyData();
+					int bodyLen = telemPkt.GetLength() - MIN_PKT_SIZE;
+					RobotTelemetry telem = RobotTelemetry::Deserialize(reinterpret_cast<unsigned char*>(bodyPtr), static_cast<std::size_t>(bodyLen));
+					return telem;
+				}
+			}
+		}
+
+		// Otherwise, read the telemetry packet from the socket as before
 		char telemBuf[bufMax];
 		int teleBytes = GetData(telemBuf);
 		if (teleBytes <= 0) throw std::runtime_error("Failed to receive telemetry data after ACK response. No data received.");
 
-		RobotTelemetry telem = RobotTelemetry::Deserialize(reinterpret_cast<unsigned char*>(telemBuf), static_cast<std::size_t>(teleBytes));
+		// Parse the telemetry packet to extract body then deserialize
+		PktDef telemPkt(telemBuf, teleBytes);
+		char* bodyPtr = telemPkt.GetBodyData();
+		int bodyLen = telemPkt.GetLength() - MIN_PKT_SIZE;
+		RobotTelemetry telem = RobotTelemetry::Deserialize(reinterpret_cast<unsigned char*>(bodyPtr), static_cast<std::size_t>(bodyLen));
 
 		return telem;
 	}

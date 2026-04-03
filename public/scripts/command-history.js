@@ -8,7 +8,39 @@ class CommandHistory {
         this.history = [];
         this.maxEntries = 50; // Keep last 50 commands
         this.logElement = document.getElementById('commandLog');
+        this.btnHistory = document.getElementById('btnHistory');
+        this.historyPanel = document.getElementById('historyPanel');
+        this.btnCloseHistory = document.getElementById('btnCloseHistory');
+        this.btnExportHistoryEl = document.getElementById('btnExportHistory');
+        this.btnClearHistoryEl = document.getElementById('btnClearHistory');
         this.loadHistory();
+        this.attachUI();
+    }
+
+    attachUI() {
+        if (this.btnHistory && this.historyPanel) {
+            this.btnHistory.addEventListener('click', () => {
+                this.historyPanel.classList.toggle('visible');
+                this.historyPanel.classList.toggle('hidden');
+            });
+        }
+        if (this.btnCloseHistory && this.historyPanel) {
+            this.btnCloseHistory.addEventListener('click', () => {
+                this.historyPanel.classList.add('hidden');
+                this.historyPanel.classList.remove('visible');
+            });
+        }
+        if (this.btnExportHistoryEl) {
+            this.btnExportHistoryEl.addEventListener('click', () => this.exportAsJSON());
+        }
+        if (this.btnClearHistoryEl) {
+            this.btnClearHistoryEl.addEventListener('click', () => this.clearHistory());
+        }
+        // Inline open button in the right panel
+        const inlineOpen = document.getElementById('btnOpenHistoryInline');
+        if (inlineOpen && this.btnHistory) {
+            inlineOpen.addEventListener('click', () => this.btnHistory.click());
+        }
     }
 
     /**

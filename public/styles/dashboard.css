@@ -431,6 +431,60 @@ button {
     display: none;
 }
 
+/* Telemetry status bar (horizontal cards) */
+.status-bar {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+
+.status-card {
+    min-width: 120px;
+    max-width: 220px;
+    background: white;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    border-left: 4px solid rgba(102, 126, 234, 0.12);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.status-card .card-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.status-card .card-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.status-card.small {
+    min-width: 90px;
+    padding: 8px;
+}
+
+.status-card.warning { border-left-color: #f59e0b; }
+.status-card.alert { border-left-color: #ef4444; }
+.status-card.ok { border-left-color: #10b981; }
+
+.status-bar .status-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+@media (max-width: 640px) {
+    .status-card { min-width: 100px; max-width: 160px; }
+}
+
 .settings-panel.visible {
     max-height: 500px;
     display: block;
@@ -446,6 +500,17 @@ button {
     color: #1f2937;
     border-bottom: 2px solid #667eea;
     padding-bottom: 8px;
+}
+
+/* Telemetry header inside the telemetry panel */
+.telemetry-header h3 {
+    font-size: 16px;
+    margin: 0;
+    color: #1f2937;
+}
+
+.telemetry-header .btn-status {
+    margin-left: 12px;
 }
 
 .settings-group {
@@ -621,11 +686,13 @@ select:focus {
 /* Responsive Design */
 @media (max-width: 1024px) {
     .dashboard-content {
-        grid-template-columns: 1fr;
+        /* Keep in flow but collapsed so transitions can animate */
+        max-height: 0;
+        opacity: 0;
     }
 
-    .control-panel {
-        border-right: none;
+        max-height: 500px;
+        opacity: 1;
         border-bottom: 1px solid #e5e7eb;
     }
 
@@ -638,6 +705,26 @@ select:focus {
     .dashboard-container {
         height: auto;
     }
+}
+
+/* Comm Console: ensure minimum visible size and scrolling */
+.comm-console {
+    background: #0b0b0b;
+    color: #e6e6e6;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 8px;
+    min-height: 220px; /* ~10 lines */
+    max-height: 520px;
+    overflow-y: auto;
+    border-radius: 4px;
+    border: 1px solid #222;
+    white-space: pre-wrap;
+}
+
+/* Make console panel taller than default panels */
+#consolePanel.settings-panel.visible {
+    max-height: 700px;
 }
 
 @media (max-width: 640px) {

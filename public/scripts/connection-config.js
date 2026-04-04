@@ -30,17 +30,21 @@ class ConnectionConfig {
         this.socketType = document.getElementById('socketType');
         this.btnConnect = document.getElementById('btnConnect');
         this.btnDisconnect = document.getElementById('btnDisconnect');
+        this.btnReconnect = document.getElementById('btnReconnect');
         this.connectionStatus = document.getElementById('connectionStatus');
         this.connectionMode = document.getElementById('connectionMode');
+        this.lastIP = document.getElementById('lastIP');
+        this.lastPort = document.getElementById('lastPort');
     }
 
     attachEventListeners() {
         // Settings panel toggle
         this.btnSettings.addEventListener('click', () => this.toggleSettingsPanel());
 
-        // Connection buttons (guard nulls)
-        if (this.btnConnect) this.btnConnect.addEventListener('click', () => this.connect());
-        if (this.btnDisconnect) this.btnDisconnect.addEventListener('click', () => this.disconnect());
+        // Connection buttons
+        this.btnConnect.addEventListener('click', () => this.connect());
+        this.btnDisconnect.addEventListener('click', () => this.disconnect());
+        this.btnReconnect.addEventListener('click', () => this.reconnect());
 
         // Listen for telemetry updates to refresh heartbeat (for UDP)
         window.addEventListener('telemetryReceived', () => this.onTelemetryReceived());
@@ -68,8 +72,6 @@ class ConnectionConfig {
         }
 
         try {
-            // Prevent duplicate clicks while connecting
-            if (this.btnConnect) this.btnConnect.disabled = true;
             // Log outgoing request
             const outgoingEntry = {
                 type: 'OUTGOING',
@@ -78,7 +80,7 @@ class ConnectionConfig {
                 message: '/robot/connect request sent',
                 success: null
             };
-            window.commandHistory?.addEntry(outgoingEntry);
+            //window.commandHistory?.addEntry(outgoingEntry);
             // Also show outgoing connect in raw console
             window.robotController?.appendConsole(`OUTGOING: /robot/connect -> ${JSON.stringify(outgoingEntry.request)}`);
 
@@ -118,9 +120,9 @@ class ConnectionConfig {
                 });
                 // Also show connect success in raw console
                 window.robotController?.appendConsole({ event: 'CONNECT', ok: true, to: `${ip}:${port}`, mode: modeLabel, response: data });
-                // ensure buttons reflect connected state
-                this.updateConnectionDisplay();
-            } else {
+            } 
+            else 
+            {
                 // Try to capture response body for logging
                 let errText = '';
                 try { errText = await response.text(); } catch (e) { errText = '<unreadable response>'; }
@@ -169,7 +171,6 @@ class ConnectionConfig {
      */
     async disconnect() {
         try {
-            if (this.btnDisconnect) this.btnDisconnect.disabled = true;
             await fetch('/robot/disconnect', {
                 method: 'POST',
                 headers: {
@@ -194,8 +195,6 @@ class ConnectionConfig {
             });
             // Also show disconnection in raw console
             window.robotController?.appendConsole({ event: 'DISCONNECT', to: `${this.currentIP}:${this.currentPort}` });
-            // ensure buttons reflect disconnected state
-            this.updateConnectionDisplay();
         } catch (error) {
             console.error('Disconnect error:', error);
         }
@@ -299,37 +298,9 @@ class ConnectionConfig {
         // Update mode display
         const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : 'UDP';
         this.connectionStatus.textContent = this.isConnected ? 'Connected' : 'Disconnected';
-        this.connectionMode.textContent = `${this.currentIP}:${this.currentPort} (${modeLabel})`;
-
-        // Enable/disable connect/disconnect buttons to prevent invalid actions
-        try {
-            if (this.btnConnect) this.btnConnect.disabled = !!this.isConnected;
-            if (this.btnDisconnect) this.btnDisconnect.disabled = !this.isConnected;
-        } catch (e) { /* ignore if elements not present */ }
-
-        // Update persistent/connect cards in UI if present
-        try {
-            const connCard = document.getElementById('statusCardConnection');
-            const modeCard = document.getElementById('statusCardMode');
-            const lastCard = document.getElementById('statusCardLast');
-            if (connCard) {
-                const label = this.isConnected ? 'Connected' : 'Disconnected';
-                connCard.querySelector('.value').textContent = label;
-                connCard.classList.remove('ok', 'alert');
-                connCard.classList.add(this.isConnected ? 'ok' : 'alert');
-            }
-            if (modeCard) {
-                modeCard.querySelector('.value').textContent = modeLabel;
-            }
-            if (lastCard) {
-                lastCard.querySelector('.value').textContent = this.lastHeartbeat ? new Date(this.lastHeartbeat).toLocaleTimeString() : '--';
-            }
-            // Mirror persistent buttons with main buttons if present
-            const btnConnectPersist = document.getElementById('btnConnectPersist');
-            const btnDisconnectPersist = document.getElementById('btnDisconnectPersist');
-            if (btnConnectPersist) btnConnectPersist.disabled = !!this.isConnected;
-            if (btnDisconnectPersist) btnDisconnectPersist.disabled = !this.isConnected;
-        } catch (e) { /* ignore DOM issues */ }
+        this.connectionMode.textContent = `(${modeLabel})`;
+        this.lastIP.textContent = this.currentIP;
+        this.lastPort.textContent = this.currentPort;
     }
 
     /**

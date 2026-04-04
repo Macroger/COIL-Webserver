@@ -13,6 +13,14 @@ class RobotController {
         this.attachEventListeners();
         this.checkConnectionStatus();
         this.updatePendingDisplay();
+        // Ensure slider readouts are correct on load
+        if (this.durationInput && this.durationDisplay) {
+            this.durationDisplay.textContent = this.durationInput.value + 's';
+        }
+        if (this.powerInput && this.powerDisplay) {
+            if (Number(this.powerInput.value) < 80) this.powerInput.value = 80;
+            this.powerDisplay.textContent = this.powerInput.value + '%';
+        }
     }
 
     initializeElements() {
@@ -39,6 +47,14 @@ class RobotController {
         this.statusIndicator = document.getElementById('statusIndicator');
         this.statusText = document.getElementById('statusText');
         this.statusBar = document.getElementById('statusBar');
+        // Telemetry card elements
+        this.lastPktCounter = document.getElementById('telemetryLastPktCounter');
+        this.currentGrade = document.getElementById('telemetryCurrentGrade');
+        this.hitCount = document.getElementById('telemetryHitCount');
+        this.heading = document.getElementById('telemetryHeading');
+        this.lastCommandElem = document.getElementById('telemetryLastCmd');
+        this.lastCommandValue = document.getElementById('telemetryLastCmdValue');
+        this.lastCommandPower = document.getElementById('telemetryLastCmdPower');
 
         // Comm console
         this.commConsole = document.getElementById('commConsole');
@@ -191,6 +207,20 @@ class RobotController {
         // Keep UI disabled for duration + 250ms as requested
         const waitMs = Math.round((cmd.duration || 0) * 1000) + 250;
         this.appendConsole(`Waiting ${waitMs}ms for command completion (UI locked)`);
+
+        // Show countdown in processing message
+        if (this.processingMessage) {
+            let remaining = waitMs;
+            this.processingMessage.textContent = `Please wait, processing command (${cmd.type})... (${(remaining/1000).toFixed(1)}s)`;
+            let interval = setInterval(() => {
+                remaining -= 100;
+                if (remaining > 0) {
+                    this.processingMessage.textContent = `Please wait, processing command (${cmd.type})... (${(remaining/1000).toFixed(1)}s)`;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
         await new Promise(r => setTimeout(r, waitMs));
 
         // After wait, check pending slot
@@ -283,12 +313,15 @@ class RobotController {
         this.appendConsole('GET /robot/telemetry_request -> sending...');
         try {
             const response = await fetch('/robot/telemetry_request', { method: 'GET' });
-            if (response.ok) {
+            if (response.ok) 
+            {
                 const body = await response.json().catch(() => null);
                 this.updateStatusDisplay(body?.telemetry || {});
                 this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
                 window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: body, success: true });
-            } else {
+            } 
+            else 
+            {
                 let respBody = null;
                 try {
                     const ct = response.headers.get('content-type') || '';
@@ -324,17 +357,17 @@ class RobotController {
         if (status.last_command_power !== undefined && this.lastCommandPower) this.lastCommandPower.textContent = status.last_command_power;
         if (this.lastUpdate) this.lastUpdate.textContent = new Date().toLocaleTimeString();
 
-        if (this.statusBar) {
-            const set = (key, label, value, unit, state) => this.createOrUpdateCard(key, label, value, unit, state);
-            set('connection', 'Connection', this.statusText ? this.statusText.textContent : (status.connected ? 'Connected' : 'Disconnected'), '');
-            if (status.last_packet_counter !== undefined) set('pkt', 'Packet #', status.last_packet_counter, '');
-            if (status.current_grade !== undefined) set('grade', 'Grade', status.current_grade, '');
-            if (status.hit_count !== undefined) set('hits', 'Hits', status.hit_count, '');
-            if (status.heading !== undefined) set('heading', 'Heading', status.heading, '°');
-            if (status.last_command !== undefined) set('lastcmd', 'Last Cmd', status.last_command, '');
-            if (status.last_command_value !== undefined) set('lastval', 'Cmd Val', status.last_command_value, '');
-            if (status.last_command_power !== undefined) set('lastpow', 'Power', status.last_command_power, '%');
-        }
+        // if (this.statusBar) {
+        //     const set = (key, label, value, unit, state) => this.createOrUpdateCard(key, label, value, unit, state);
+        //     set('connection', 'Connection', this.statusText ? this.statusText.textContent : (status.connected ? 'Connected' : 'Disconnected'), '');
+        //     if (status.last_packet_counter !== undefined) set('pkt', 'Packet #', status.last_packet_counter, '');
+        //     if (status.current_grade !== undefined) set('grade', 'Grade', status.current_grade, '');
+        //     if (status.hit_count !== undefined) set('hits', 'Hits', status.hit_count, '');
+        //     if (status.heading !== undefined) set('heading', 'Heading', status.heading, '°');
+        //     if (status.last_command !== undefined) set('lastcmd', 'Last Cmd', status.last_command, '');
+        //     if (status.last_command_value !== undefined) set('lastval', 'Cmd Val', status.last_command_value, '');
+        //     if (status.last_command_power !== undefined) set('lastpow', 'Power', status.last_command_power, '%');
+        // }
     }
 
     createOrUpdateCard(key, label, value, unit, state) {

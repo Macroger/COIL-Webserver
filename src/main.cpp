@@ -302,9 +302,22 @@ int main()
 				else if (direction == "LEFT")     dir = coil::protocol::constants::LEFT;
 				else if (direction == "RIGHT")    dir = coil::protocol::constants::RIGHT;
 
-				unsigned char driveData[3] = { dir, duration, power };
 				pkt.SetCmd(coil::protocol::CmdType::DRIVE);
-				pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+
+				if (dir == coil::protocol::constants::LEFT || dir == coil::protocol::constants::RIGHT)
+				{
+					// TurnBody: Direction (1-byte) + Duration (2-bytes) — no Power field
+					unsigned char turnData[3] = { dir,
+					                              static_cast<uint8_t>(duration & 0xFF),
+					                              static_cast<uint8_t>((duration >> 8) & 0xFF) };
+					pkt.SetBodyData(reinterpret_cast<char*>(turnData), 3);
+				}
+				else
+				{
+					// DriveBody: Direction (1-byte) + Duration (1-byte) + Power (1-byte)
+					unsigned char driveData[3] = { dir, duration, power };
+					pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+				}
 			}
 			else if (command == "SLEEP")
 			{
@@ -497,7 +510,7 @@ int main()
 
 	// POST /robot/disconnect - Disconnect from robot
 	CROW_ROUTE(app, "/robot/disconnect").methods("POST"_method)
-	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
 	{
 		auto response = crow::json::wvalue();
 		response["status"] = "success";
@@ -509,6 +522,32 @@ int main()
 			std::lock_guard<std::mutex> lock(socketMutex);
 			if (socketMgr) 
 			{
+				// Send a SLEEP packet before disconnecting so the robot enters sleep mode cleanly
+				coil::protocol::PktDef sleepPkt;
+				sleepPkt.SetPktCount(++pktCounter);
+				sleepPkt.SetCmd(coil::protocol::CmdType::SLEEP);
+				socketMgr->SendData(sleepPkt.GenPacket(), sleepPkt.GetLength());
+
+				// Wait for the robot's acknowledgement of the SLEEP command
+				char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+				int sleepBytes = socketMgr->GetData(recvBuf);
+
+				// Parse the ACK and surface it in the response so the frontend can log it
+				if (sleepBytes > 0)
+				{
+					coil::protocol::PktDef sleepResp(recvBuf, sleepBytes);
+					bool sleepAck = sleepResp.GetAck();
+					response["sleep_ack"]      = sleepAck;
+					response["sleep_response"] = sleepAck ? "ACK" : "NACK";
+					response["sleep_pkt_count"] = pktCounter;
+				}
+				else
+				{
+					response["sleep_ack"]      = false;
+					response["sleep_response"] = "TIMEOUT";
+					response["sleep_pkt_count"] = pktCounter;
+				}
+
 				socketMgr->DisconnectTCP();
 			}
 			else 

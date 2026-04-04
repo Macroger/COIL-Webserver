@@ -197,11 +197,30 @@ class ConnectionConfig {
      */
     async disconnect() {
         try {
-            await fetch('/robot/disconnect', {
+            const fetchResp = await fetch('/robot/disconnect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 }
+            });
+
+            let disconnectData = null;
+            try {
+                const ct = fetchResp.headers.get('content-type') || '';
+                if (ct.includes('application/json')) disconnectData = await fetchResp.json();
+            } catch (_) { /* ignore parse errors */ }
+
+            // Log the SLEEP signal result to the raw message console
+            const sleepResponse = disconnectData?.sleep_response ?? 'UNKNOWN';
+            const sleepPkt = disconnectData?.sleep_pkt_count ?? '?';
+            window.robotController?.appendConsole(`POST /robot/disconnect -> SLEEP pkt #${sleepPkt}: ${sleepResponse}`);
+
+            // Record the SLEEP command outcome in command history
+            window.commandHistory?.addEntry({
+                type: 'SLEEP',
+                timestamp: new Date(),
+                success: disconnectData?.sleep_ack === true,
+                response: sleepResponse
             });
 
             this.isConnected = false;

@@ -111,11 +111,6 @@ namespace coil::protocol
 
 			// Copy the data into the packet body
 			std::memcpy(pktBody, pktBodyPtr, static_cast<size_t>(packetBodyLength));
-
-			// Pretty print the body in human readable strings for debugging
-			std::string bodyStr(pktBody, packetBodyLength);
-			std::printf("Packet body (%d bytes): %s\n", packetBodyLength, bodyStr.c_str());
-			
 		}
 		else
 		{

@@ -204,6 +204,8 @@ class CommandHistory {
             commandText = `TURN ${dir}${ang}`;
         } else if (entry.type === 'STOP') {
             commandText = 'STOP';
+        } else if (entry.type === 'SLEEP') {
+            commandText = `SLEEP (${entry.response || 'UNKNOWN'})`;
         } else if (entry.type === 'STATUS_REQUEST') {
             commandText = 'STATUS REQUEST';
             const t = entry.response?.telemetry;

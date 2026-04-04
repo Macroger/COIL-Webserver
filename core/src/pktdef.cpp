@@ -14,7 +14,8 @@ namespace coil::protocol
 	/// Constructor for PktDef class that initializes the packet header, body, CRC, and raw buffer to default values.
 	/// </summary>
 	PktDef::PktDef()
-		: pktHeader{}, pktBody(nullptr), pktCRC(0), rawBuffer(nullptr) {
+		: pktHeader{}, pktBody(nullptr), pktCRC(0), rawBuffer(nullptr),
+		  endianness(coil::protocol::Endianness::LittleEndian) {
 		pktHeader.packetLength = MIN_PKT_SIZE;
 	}
 

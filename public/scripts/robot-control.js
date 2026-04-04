@@ -43,7 +43,6 @@ class RobotController {
         this.processingMessage = document.getElementById('processingMessage');
 
         // Status / telemetry
-        this.btnStatus = document.getElementById('btnStatus');
         this.statusIndicator = document.getElementById('statusIndicator');
         this.statusText = document.getElementById('statusText');
         this.statusBar = document.getElementById('statusBar');
@@ -91,14 +90,9 @@ class RobotController {
         // Console controls
         if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
 
-        // Telemetry toggle
-        if (this.btnTelemetry && this.telemetryPanel) {
-            this.btnTelemetry.addEventListener('click', () => {
-                this.telemetryPanel.classList.toggle('visible');
-                this.telemetryPanel.classList.toggle('hidden');
-                const expanded = this.telemetryPanel.classList.contains('visible');
-                this.btnTelemetry.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            });
+        // Telemetry button — request telemetry directly
+        if (this.btnTelemetry) {
+            this.btnTelemetry.addEventListener('click', () => this.requestStatus());
         }
 
         // Console toggle
@@ -117,7 +111,7 @@ class RobotController {
 
     /* --- Input handlers --- */
     handleDirection(direction) {
-        const duration = this.parseNumber(this.durationInput.value, 2);
+        const duration = this.parseNumber(this.durationInput.value, 5);
         const power = this.parseNumber(this.powerInput.value, 80);
         const cmd = {
             type: direction === 'left' || direction === 'right' ? 'TURN' : 'MOVE',
@@ -305,10 +299,10 @@ class RobotController {
 
     /* --- Telemetry & Status --- */
     async requestStatus() {
-        if (this.btnStatus) {
-            this.btnStatus.disabled = true;
-            this.btnStatus.classList.add('loading');
-            this.btnStatus.setAttribute('aria-busy', 'true');
+        if (this.btnTelemetry) {
+            this.btnTelemetry.disabled = true;
+            this.btnTelemetry.classList.add('loading');
+            this.btnTelemetry.setAttribute('aria-busy', 'true');
         }
         this.appendConsole('GET /robot/telemetry_request -> sending...');
         try {
@@ -316,7 +310,6 @@ class RobotController {
             if (response.ok) 
             {
                 const body = await response.json().catch(() => null);
-                this.updateStatusDisplay(body?.telemetry || {});
                 this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
                 window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: body, success: true });
             } 

@@ -30,7 +30,7 @@ class ConnectionConfig {
         this.socketType = document.getElementById('socketType');
         this.btnConnect = document.getElementById('btnConnect');
         this.btnDisconnect = document.getElementById('btnDisconnect');
-        this.btnReconnect = document.getElementById('btnReconnect');
+        this.btnConnectSim = document.getElementById('btnConnectSim');
         this.connectionStatus = document.getElementById('connectionStatus');
         this.connectionMode = document.getElementById('connectionMode');
         this.lastIP = document.getElementById('lastIP');
@@ -44,7 +44,30 @@ class ConnectionConfig {
         // Connection buttons
         this.btnConnect.addEventListener('click', () => this.connect());
         this.btnDisconnect.addEventListener('click', () => this.disconnect());
-        this.btnReconnect.addEventListener('click', () => this.reconnect());
+
+        // Simulator preset button
+        if (this.btnConnectSim) {
+            this.btnConnectSim.addEventListener('click', () => {
+                const isUDP = parseInt(this.socketType.value) === ConnectionType.UDP;
+                this.robotIP.value = '10.172.41.150';
+                this.robotPort.value = isUDP ? '29500' : '29000';
+
+                // Flash the filled fields so the user sees the change
+                [this.robotIP, this.robotPort].forEach(el => {
+                    el.classList.add('sim-filled');
+                    setTimeout(() => el.classList.remove('sim-filled'), 1500);
+                });
+
+                // Brief confirmation on the button itself
+                const original = this.btnConnectSim.textContent;
+                this.btnConnectSim.textContent = '✓ Settings loaded';
+                this.btnConnectSim.disabled = true;
+                setTimeout(() => {
+                    this.btnConnectSim.textContent = original;
+                    this.btnConnectSim.disabled = false;
+                }, 1500);
+            });
+        }
 
         // Listen for telemetry updates to refresh heartbeat (for UDP)
         window.addEventListener('telemetryReceived', () => this.onTelemetryReceived());
@@ -84,17 +107,20 @@ class ConnectionConfig {
             // Also show outgoing connect in raw console
             window.robotController?.appendConsole(`OUTGOING: /robot/connect -> ${JSON.stringify(outgoingEntry.request)}`);
 
-            const response = await fetch('/robot/connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    ip: ip,
-                    port: port,
-                    mode: mode
-                })
-            });
+            const modeStr = mode === ConnectionType.UDP ? 'udp' : 'tcp';
+            const response = await fetch(`/robot/connect/${encodeURIComponent(ip)}/${port}/${modeStr}`, {
+                method: 'POST'});
+            // const response = await fetch('/robot/connect', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json'
+            //     },
+            //     body: JSON.stringify({
+            //         ip: ip,
+            //         port: port,
+            //         mode: mode
+            //     })
+            // });
 
             const modeLabel = mode === ConnectionType.TCP ? 'TCP' : 'UDP';
 
@@ -265,6 +291,7 @@ class ConnectionConfig {
     updateConnectionDisplay() {
         const statusIndicator = document.getElementById('statusIndicator');
         const statusText = document.getElementById('statusText');
+        let displayText = 'Disconnected';
 
         if (this.isConnected) {
             if (this.currentMode === ConnectionType.UDP) {
@@ -274,26 +301,23 @@ class ConnectionConfig {
 
                 if (timeSinceLastHeartbeat < 5) {
                     // Fresh
-                    statusIndicator.classList.remove('disconnected', 'stale');
-                    statusIndicator.classList.add('connected');
-                    statusText.textContent = 'Connected';
+                    if (statusIndicator) { statusIndicator.classList.remove('disconnected', 'stale'); statusIndicator.classList.add('connected'); }
+                    displayText = 'Connected';
                 } else {
                     // Stale
-                    statusIndicator.classList.remove('disconnected', 'connected');
-                    statusIndicator.classList.add('stale');
-                    statusText.textContent = 'Stale (no response)';
+                    if (statusIndicator) { statusIndicator.classList.remove('disconnected', 'connected'); statusIndicator.classList.add('stale'); }
+                    displayText = 'Stale (no response)';
                 }
             } else {
                 // TCP
-                statusIndicator.classList.remove('disconnected', 'stale');
-                statusIndicator.classList.add('connected');
-                statusText.textContent = 'Connected';
+                if (statusIndicator) { statusIndicator.classList.remove('disconnected', 'stale'); statusIndicator.classList.add('connected'); }
+                displayText = 'Connected';
             }
         } else {
-            statusIndicator.classList.remove('connected', 'stale');
-            statusIndicator.classList.add('disconnected');
-            statusText.textContent = 'Disconnected';
+            if (statusIndicator) { statusIndicator.classList.remove('connected', 'stale'); statusIndicator.classList.add('disconnected'); }
+            displayText = 'Disconnected';
         }
+        if (statusText) statusText.textContent = displayText;
 
         // Update mode display
         const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : 'UDP';
@@ -304,7 +328,7 @@ class ConnectionConfig {
 
         // Mirror into status cards
         const connCard = document.getElementById('statusCardConnection');
-        if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = statusText ? statusText.textContent : (this.isConnected ? 'Connected' : 'Disconnected'); }
+        if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = displayText; }
         const modeCard = document.getElementById('statusCardMode');
         if (modeCard) { const v = modeCard.querySelector('.value'); if (v) v.textContent = modeLabel; }
     }
@@ -346,24 +370,28 @@ class ConnectionConfig {
      */
     initializeConnection() {
         // Check if we were previously connected
-        try {
-            const response = fetch('/robot/check-connection', { method: 'GET' });
-            response.then(res => {
+        fetch('/robot/check-connection', { method: 'GET' })
+            .then(res => {
                 if (res.ok) {
-                    res.json().then(data => {
+                    return res.json().then(data => {
                         if (data.connected) {
                             this.isConnected = true;
                             this.lastHeartbeat = new Date();
                             this.startHeartbeatMonitor();
+                        } else {
+                            this.isConnected = false;
                         }
-                        this.updateConnectionDisplay();
                     });
+                } else {
+                    this.isConnected = false;
                 }
+            })
+            .catch(() => {
+                this.isConnected = false;
+            })
+            .finally(() => {
+                this.updateConnectionDisplay();
             });
-        } catch (error) {
-            console.log('Connection check failed, assuming disconnected');
-            this.updateConnectionDisplay();
-        }
     }
 
     /**

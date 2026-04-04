@@ -271,6 +271,37 @@ body {
 }
 
 /* Clear History button */
+.btn-connect-sim {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #1a3a5c 0%, #1e5fa8 100%);
+  color: #fff;
+  border: 1.5px solid #2563eb;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(30, 95, 168, 0.18);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-connect-sim:hover {
+  background: linear-gradient(135deg, #1e5fa8 0%, #2563eb 100%);
+  box-shadow: 0 6px 18px rgba(30, 95, 168, 0.28);
+  transform: translateY(-1px) scale(1.03);
+}
+
+/* Input field highlight when sim preset fills them */
+@keyframes sim-fill-flash {
+  0%   { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.0); background: inherit; }
+  30%  { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5); background: rgba(37, 99, 235, 0.08); }
+  100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.0); background: inherit; }
+}
+.sim-filled {
+  animation: sim-fill-flash 1.5s ease-out forwards;
+  border-radius: 6px;
+}
+
 .btn-clear-history {
   background: linear-gradient(135deg, #23272f 0%, #374151 100%);
   color: #fff;

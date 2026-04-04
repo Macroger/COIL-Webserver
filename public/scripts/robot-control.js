@@ -11,7 +11,6 @@ class RobotController {
         this.pendingCommand = null; // single-slot queued command
         this.initializeElements();
         this.attachEventListeners();
-        this.checkConnectionStatus();
         this.updatePendingDisplay();
         // Ensure slider readouts are correct on load
         if (this.durationInput && this.durationDisplay) {
@@ -65,6 +64,7 @@ class RobotController {
         this.telemetryPanel = document.getElementById('telemetryPanel');
         this.btnConsole = document.getElementById('btnConsole');
         this.consolePanel = document.getElementById('consolePanel');
+        this.btnStatus = document.getElementById('btnStatus');
     }
 
     attachEventListeners() {
@@ -155,11 +155,20 @@ class RobotController {
         // Determine endpoint
         const endpoint = '/robot/telecommand';
 
+        // Map frontend cmd shape to the server's expected field names:
+        // - server expects "command": "DRIVE", "direction": uppercase, "duration", "power"
+        const payload = {
+            command: 'DRIVE',
+            direction: (cmd.direction || 'forward').toUpperCase(),
+            duration: cmd.duration,
+            power: cmd.power
+        };
+
         try {
             const response = await fetch(endpoint, {
-                method: 'POST',
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(cmd)
+                body: JSON.stringify(payload)
             });
 
             let responseData = null;
@@ -176,25 +185,18 @@ class RobotController {
             }
 
             if (response.ok) {
-                this.appendConsole(`POST ${endpoint} -> OK ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`);
+                const simResponse = responseData?.sim_response || 'UNKNOWN';
+                const pktNum = responseData?.packet_count ?? '?';
+                this.appendConsole(`PUT ${endpoint} -> ${simResponse} (pkt #${pktNum})`);
             } else {
-                this.appendConsole(`POST ${endpoint} -> ERR ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`);
+                this.appendConsole(`PUT ${endpoint} -> ERR ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`);
             }
 
-            if (responseData && responseData.raw_packet) {
-                this.showRawPacket(responseData.raw_packet);
-            } else if (responseText) {
-                try {
-                    const parsed = JSON.parse(responseText);
-                    if (parsed && parsed.raw_packet) this.showRawPacket(parsed.raw_packet);
-                } catch (e) { /* ignore parse errors */ }
-            }
-
+            const ack = response.ok && (responseData?.ack === true);
             window.commandHistory?.addEntry({
                 type: cmd.type,
                 command: cmd,
-                response: responseData || responseText || (response.statusText || response.status),
-                success: response.ok,
+                success: ack,
                 timestamp: new Date()
             });
 
@@ -318,7 +320,9 @@ class RobotController {
             {
                 const body = await response.json().catch(() => null);
                 this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
-                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: body, success: true });
+                this.updateStatusDisplay(body?.telemetry);
+                this.setConnectionStatus(true);
+                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: true });
             } 
             else 
             {
@@ -330,13 +334,14 @@ class RobotController {
                 } catch (e) {
                     respBody = `(<failed to read body> ${e && e.message ? e.message : String(e)})`;
                 }
-                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: respBody || response.statusText || 'Failed', success: false });
                 this.appendConsole(`Status request failed: ${typeof respBody === 'string' ? respBody : JSON.stringify(respBody)}`);
+                this.setConnectionStatus(false);
+                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
             }
         } catch (error) {
             this.appendConsole(error);
             this.setConnectionStatus(false);
-            window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: (error && (error.stack || error.message)) || String(error), success: false });
+            window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
         } finally {
             if (this.btnStatus) {
                 this.btnStatus.disabled = false;
@@ -394,15 +399,16 @@ class RobotController {
     }
 
     setConnectionStatus(connected) {
-        if (!this.statusIndicator || !this.statusText) return;
-        if (connected) {
-            this.statusIndicator.classList.remove('disconnected');
-            this.statusIndicator.classList.add('connected');
-            this.statusText.textContent = 'Connected';
-        } else {
-            this.statusIndicator.classList.remove('connected');
-            this.statusIndicator.classList.add('disconnected');
-            this.statusText.textContent = 'Disconnected';
+        if (this.statusIndicator && this.statusText) {
+            if (connected) {
+                this.statusIndicator.classList.remove('disconnected');
+                this.statusIndicator.classList.add('connected');
+                this.statusText.textContent = 'Connected';
+            } else {
+                this.statusIndicator.classList.remove('connected');
+                this.statusIndicator.classList.add('disconnected');
+                this.statusText.textContent = 'Disconnected';
+            }
         }
         // Mirror into Connection status card
         const connCard = document.getElementById('statusCardConnection');
@@ -461,15 +467,8 @@ class RobotController {
         return Number.isFinite(n) ? n : fallback;
     }
 
-    async checkConnectionStatus() {
-        try {
-            const response = await fetch('/robot/status', { method: 'GET' });
-            this.setConnectionStatus(response.ok);
-        } catch (error) {
-            this.setConnectionStatus(false);
-        }
-    }
 }
+
 
 window.addEventListener('load', () => {
     window.robotController = new RobotController();

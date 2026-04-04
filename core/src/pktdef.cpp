@@ -64,9 +64,6 @@ namespace coil::protocol
 		}
 
 		// CRC passed - now deserialize the header
-		// Diagnostic: dump the received raw packet bytes for debugging
-		DumpHex("Received packet", rawData, bufferSize);
-		
 		// store chosen wire order
 		this->endianness = endianness;
 
@@ -405,9 +402,6 @@ namespace coil::protocol
 
 		//3. Place CRC at the last byte
 		*writePtr = pktCRC;
-
-		// Diagnostic: dump the generated raw packet bytes for debugging
-		DumpHex("Sending packet", rawBuffer, actualPacketLength);
 
 		return rawBuffer;  // Return const pointer to internal buffer
 	}

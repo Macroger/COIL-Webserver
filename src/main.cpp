@@ -436,182 +436,60 @@ int main()
 
 		res.end();
 		return true;
-	};
+	};	
 
-	// POST /robot/move - Forward / backward drive command
-	// Expected JSON: { "direction": "forward"|"backward", "duration": <ms>, "power": <0-100> }
-	CROW_ROUTE(app, "/robot/move").methods("POST"_method)
-	([&sendDrivePacket](const crow::request& req, crow::response& res)
+	// POST /robot/connect - Configure and connect to robot
+	CROW_ROUTE(app, "/robot/connect/<string>/<int>/<string>").methods("POST"_method)
+	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
 	{
-		auto body = crow::json::load(req.body);
-		if (!body)
-		{
-			res.code = 400;
-			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Invalid JSON"})");
-			res.end();
-			return;
-		}
+		
+		// Replace with:
+		coil::protocol::ConnectionType connType = (modeStr == "udp") ? coil::protocol::ConnectionType::UDP
+			: coil::protocol::ConnectionType::TCP;
+		
+		int mode = (modeStr == "udp") ? 1 : 0;
 
-		std::string direction = body["direction"].s();
-		uint8_t duration = static_cast<uint8_t>(body["duration"].d()); // UI sends seconds
-		uint8_t power    = static_cast<uint8_t>(body["power"].d());
-
-		uint8_t dir = coil::protocol::constants::FORWARD;
-		if (direction == "backward") dir = coil::protocol::constants::BACKWARD;
-
-		sendDrivePacket(dir, duration, power, res);
-	});
-
-	// POST /robot/turn - Left / right turn command
-	// Turn body wire format: { direction (uint8), duration (uint16 little-endian, seconds) }
-	// High byte must be 0x00; low byte holds the seconds value (0-255s fits fine).
-	// Simulator stores the duration value directly in the Heading telemetry field.
-	// Expected JSON: { "direction": "left"|"right", "duration": <seconds> }
-	CROW_ROUTE(app, "/robot/turn").methods("POST"_method)
-	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
-	{
-		auto body = crow::json::load(req.body);
-		if (!body)
-		{
-			res.code = 400;
-			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Invalid JSON"})");
-			res.end();
-			return;
-		}
+		uint bufferSize = coil::protocol::constants::DEFAULT_SIZE;
 
 		std::lock_guard<std::mutex> lock(socketMutex);
-
-		if (!socketMgr || !socketMgr->IsConnected())
-		{
-			res.code = 400;
-			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Not connected to robot"})");
-			res.end();
-			return;
-		}
-
+		
 		try
-		{
-			std::string direction = body["direction"].s();
-			// Protocol: TurnBody duration is seconds (2 bytes LE). High byte must be 0x00.
-			// Simulator echoes this value into the Heading telemetry field (in seconds).
-			uint8_t durationByte = static_cast<uint8_t>(body["duration"].d()); // UI sends seconds
+		{			
+			auto connType = static_cast<coil::protocol::ConnectionType>(mode);
 
-			uint8_t dir = coil::protocol::constants::LEFT;
-			if (direction == "right") dir = coil::protocol::constants::RIGHT;
+			// then construct the socket using connType:
+			socketMgr = std::make_shared<coil::protocol::MySocket>(
+				coil::protocol::SocketType::CLIENT,
+				connType,
+				port,
+				bufferSize,
+				ip
+			);
 
-			// Turn body: { direction (1 byte), duration low-byte (1 byte), 0x00 (high byte must be zero) }
-			unsigned char turnData[3] = { dir, durationByte, 0x00 };
-
-			coil::protocol::PktDef pkt;
-			pkt.SetPktCount(++pktCounter);
-			pkt.SetCmd(coil::protocol::CmdType::DRIVE);
-			pkt.SetBodyData(reinterpret_cast<char*>(turnData), 3);
-			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
-
-			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
-			int bytesRead = socketMgr->GetData(recvBuf);
-
+			// if TCP, call ConnectTCP()
+			if (connType == coil::protocol::ConnectionType::TCP) {
+				socketMgr->ConnectTCP();
+			}
+			
 			auto response = crow::json::wvalue();
-			response["status"]        = "success";
-			response["direction"]     = direction;
-			response["duration_byte"] = durationByte;
-			response["packet_count"]  = pktCounter;
-			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
-
-			if (bytesRead > 0)
-			{
-				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
-				bool ack = responsePkt.GetAck();
-				response["ack"]          = ack;
-				response["sim_response"] = ack ? "ACK" : "NACK";
-
-				char* bodyPtr = responsePkt.GetBodyData();
-				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
-				if (bodyPtr != nullptr && bodyLen > 0)
-					response["sim_message"] = std::string(bodyPtr, bodyLen);
-			}
-			else
-			{
-				response["ack"]          = false;
-				response["sim_response"] = "TIMEOUT";
-				response["sim_message"]  = "No response from simulator";
-			}
-
+			response["status"] = "success";
+			response["message"] = "Connected to robot";
+			response["ip"] = ip;
+			response["port"] = port;
+			response["mode"] = mode;
+			response["timestamp"] = static_cast<long long>(std::time(nullptr));
+			
 			res.code = 200;
 			res.set_header("Content-Type", "application/json");
 			res.write(response.dump());
 		}
-		catch (const std::exception& e)
+		catch(const std::exception& e)
 		{
 			res.code = 500;
 			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
-		}
-
-		res.end();
-	});
-
-	// POST /robot/connect - Configure and connect to robot
-	CROW_ROUTE(app, "/robot/connect").methods("POST"_method)
-	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
-	{
-		auto body = crow::json::load(req.body);
-		
-		if (!body)
-		{
-			res.code = 400;
-			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Invalid JSON"})");
-		}
-		else
-		{
-			std::string ip 		= body["ip"].s();
-			int port 			= static_cast<int>(body["port"].d());
-			int mode 			= static_cast<int>(body["mode"].d());
-
-			std::lock_guard<std::mutex> lock(socketMutex);
-			
-			try
-			{			
-				auto connType = static_cast<coil::protocol::ConnectionType>(mode);
-
-				// then construct the socket using connType:
-				socketMgr = std::make_shared<coil::protocol::MySocket>(
-					coil::protocol::SocketType::CLIENT,
-					connType,
-					port,
-					255,
-					ip
-				);
-
-				// if TCP, call ConnectTCP()
-				if (connType == coil::protocol::ConnectionType::TCP) {
-					socketMgr->ConnectTCP();
-				}
-				
-				auto response = crow::json::wvalue();
-				response["status"] = "success";
-				response["message"] = "Connected to robot";
-				response["ip"] = ip;
-				response["port"] = port;
-				response["mode"] = mode;
-				response["timestamp"] = static_cast<long long>(std::time(nullptr));
-				
-				res.code = 200;
-				res.set_header("Content-Type", "application/json");
-				res.write(response.dump());
-			}
-			catch(const std::exception& e)
-			{
-				res.code = 500;
-				res.set_header("Content-Type", "application/json");
-				res.write(R"({"status":"error","message":"Failed to connect to robot: )" + std::string(e.what()) + R"("})");
-				res.end();
-				return;
-			}			
+			res.write(R"({"status":"error","message":"Failed to connect to robot: )" + std::string(e.what()) + R"("})");
+			res.end();
+			return;
 		}
 		
 		res.end();

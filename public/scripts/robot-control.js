@@ -91,8 +91,15 @@ class RobotController {
         if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
 
         // Telemetry button — request telemetry directly
-        if (this.btnTelemetry) {
-            this.btnTelemetry.addEventListener('click', () => this.requestStatus());
+        if (this.btnTelemetry && this.telemetryPanel) 
+        {
+            this.btnTelemetry.addEventListener('click', () => 
+            {
+                this.telemetryPanel.classList.toggle('visible');
+                this.telemetryPanel.classList.toggle('hidden');
+                const expanded = this.telemetryPanel.classList.contains('visible');
+                this.btnTelemetry.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            });
         }
 
         // Console toggle
@@ -146,7 +153,7 @@ class RobotController {
         this.appendConsole(`Sending command: ${JSON.stringify(cmd)}`);
 
         // Determine endpoint
-        const endpoint = cmd.type === 'MOVE' ? '/robot/move' : (cmd.type === 'TURN' ? '/robot/turn' : '/robot/command');
+        const endpoint = '/robot/telecommand';
 
         try {
             const response = await fetch(endpoint, {
@@ -299,10 +306,10 @@ class RobotController {
 
     /* --- Telemetry & Status --- */
     async requestStatus() {
-        if (this.btnTelemetry) {
-            this.btnTelemetry.disabled = true;
-            this.btnTelemetry.classList.add('loading');
-            this.btnTelemetry.setAttribute('aria-busy', 'true');
+        if (this.btnStatus) {
+            this.btnStatus.disabled = true;
+            this.btnStatus.classList.add('loading');
+            this.btnStatus.setAttribute('aria-busy', 'true');
         }
         this.appendConsole('GET /robot/telemetry_request -> sending...');
         try {

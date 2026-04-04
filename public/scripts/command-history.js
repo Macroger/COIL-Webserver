@@ -45,12 +45,12 @@ class CommandHistory {
 
     handleWindowResize() {
         // Force a re-render so sizes and the goto button placement
-        // are recomputed. Then keep the view scrolled to the bottom
-        // if it was previously near the bottom.
-        const wasNearBottom = this.logElement && (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 40);
+        // are recomputed. Then keep the view scrolled to the top
+        // if it was previously near the top.
+        const wasNearTop = this.logElement && (this.logElement.scrollTop <= 40);
         this.renderHistory();
-        if (this.logElement && wasNearBottom) {
-            this.logElement.scrollTop = this.logElement.scrollHeight;
+        if (this.logElement && wasNearTop) {
+            this.logElement.scrollTop = 0;
         }
     }
 
@@ -141,7 +141,9 @@ class CommandHistory {
         if (!this.logElement) return;
 
         // remember if view was near bottom so we can preserve auto-scroll
-        const nearBottomBefore = (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 20);
+        //const nearBottomBefore = (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 20);
+                
+        const nearTopBefore = this.logElement.scrollTop <= 20;
 
         // Clear current log
         this.logElement.innerHTML = '';
@@ -152,7 +154,7 @@ class CommandHistory {
         }
 
         // Render entries oldest-first so newest appear at the bottom
-        this.history.forEach(entry => {
+        this.history.reverse().forEach(entry => {
             const logEntry = this.createLogEntry(entry);
             this.logElement.appendChild(logEntry);
         });
@@ -169,8 +171,8 @@ class CommandHistory {
         }
 
         // If view was near bottom before update, auto-scroll to bottom; otherwise mark as stale
-        if (nearBottomBefore) {
-            this.logElement.scrollTop = this.logElement.scrollHeight;
+        if (nearTopBefore) {
+            this.logElement.scrollTop = 0;
         } else {
             this.logElement.classList.add('stale');
             if (this.gotoBtn) this.gotoBtn.style.display = 'block';
@@ -369,7 +371,7 @@ class CommandHistory {
         btn.title = 'Go to latest message';
         btn.style.display = 'none';
         btn.addEventListener('click', () => {
-            this.logElement.scrollTop = this.logElement.scrollHeight;
+            this.logElement.scrollTop = 0;
             this.logElement.classList.remove('stale');
             btn.style.display = 'none';
         });
@@ -388,9 +390,10 @@ class CommandHistory {
 
     updateStaleState() {
         if (!this.logElement) return;
-        const distance = this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight);
-        const atBottom = distance <= 20;
-        if (atBottom) {
+        // const distance = this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight);
+        // const atBottom = distance <= 20;
+        const atTop = this.logElement.scrollTop <= 20;
+        if (atTop) {
             this.logElement.classList.remove('stale');
             if (this.gotoBtn) this.gotoBtn.style.display = 'none';
         } else {
@@ -421,8 +424,8 @@ class CommandHistory {
         }
         // If the view was near the bottom, keep it scrolled to bottom.
         if (this.logElement) {
-            const nearBottom = (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 40);
-            if (nearBottom) this.logElement.scrollTop = this.logElement.scrollHeight;
+            const nearTop = this.logElement.scrollTop <= 40;
+            if (nearTop) this.logElement.scrollTop = 0;
         }
     }
 }

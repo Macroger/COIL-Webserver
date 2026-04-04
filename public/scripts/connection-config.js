@@ -301,6 +301,12 @@ class ConnectionConfig {
         this.connectionMode.textContent = `(${modeLabel})`;
         this.lastIP.textContent = this.currentIP;
         this.lastPort.textContent = this.currentPort;
+
+        // Mirror into status cards
+        const connCard = document.getElementById('statusCardConnection');
+        if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = statusText ? statusText.textContent : (this.isConnected ? 'Connected' : 'Disconnected'); }
+        const modeCard = document.getElementById('statusCardMode');
+        if (modeCard) { const v = modeCard.querySelector('.value'); if (v) v.textContent = modeLabel; }
     }
 
     /**

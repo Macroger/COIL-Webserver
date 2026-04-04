@@ -404,6 +404,9 @@ class RobotController {
             this.statusIndicator.classList.add('disconnected');
             this.statusText.textContent = 'Disconnected';
         }
+        // Mirror into Connection status card
+        const connCard = document.getElementById('statusCardConnection');
+        if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = connected ? 'Connected' : 'Disconnected'; }
     }
 
     appendConsole(msg) {

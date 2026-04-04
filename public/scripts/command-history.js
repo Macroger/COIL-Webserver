@@ -119,6 +119,19 @@ class CommandHistory {
 
         this.renderHistory();
         this.saveHistory();
+
+        // Update status cards
+        const lastCard = document.getElementById('statusCardLast');
+        if (lastCard) { const v = lastCard.querySelector('.value'); if (v) v.textContent = entry.timestamp ? entry.timestamp.toLocaleTimeString() : '--'; }
+        const cmdCard = document.getElementById('statusCardLastCmd');
+        if (cmdCard) {
+            const v = cmdCard.querySelector('.value');
+            if (v) {
+                let label = entry.type || '--';
+                if (entry.command && entry.command.direction) label += ' ' + entry.command.direction;
+                v.textContent = label.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+            }
+        }
     }
 
     /**
@@ -146,10 +159,12 @@ class CommandHistory {
 
         // Re-attach goto button since we clear innerHTML above which removes it
         if (this.gotoBtn) {
-            const target = this.historyPanel || this.logElement;
-            // ensure button is appended to the non-scrolling container so it doesn't scroll with the log
+            // Append to .history-section which has position:relative so absolute
+            // positioning anchors correctly to the bottom-center of the log area.
+            const target = (this.logElement && this.logElement.closest('.history-section'))
+                || this.historyPanel
+                || this.logElement;
             target.appendChild(this.gotoBtn);
-            // ensure it overlays by setting a high z-index
             this.gotoBtn.style.zIndex = '999';
         }
 

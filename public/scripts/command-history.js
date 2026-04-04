@@ -26,6 +26,32 @@ class CommandHistory {
 
         this.loadHistory();
         this.attachUI();
+        // Re-evaluate layout on window resize to ensure the command log
+        // and goto button recalculate correctly after viewport changes.
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => this.handleWindowResize(), 150);
+        });
+        // cache command log element and default max-height
+        this.commandLogEl = this.logElement;
+        const computed = this.commandLogEl ? getComputedStyle(this.commandLogEl).maxHeight : null;
+        this.defaultCommandLogMax = 340;
+        if (computed && computed !== 'none') {
+            const px = parseInt(computed.replace('px', ''), 10);
+            if (!isNaN(px)) this.defaultCommandLogMax = px;
+        }
+    }
+
+    handleWindowResize() {
+        // Force a re-render so sizes and the goto button placement
+        // are recomputed. Then keep the view scrolled to the bottom
+        // if it was previously near the bottom.
+        const wasNearBottom = this.logElement && (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 40);
+        this.renderHistory();
+        if (this.logElement && wasNearBottom) {
+            this.logElement.scrollTop = this.logElement.scrollHeight;
+        }
     }
 
     attachUI() {
@@ -46,6 +72,27 @@ class CommandHistory {
         }
         if (this.btnClearHistoryEl) {
             this.btnClearHistoryEl.addEventListener('click', () => this.clearHistory());
+        }
+        // Status cards collapse toggle (keeps behavior centralized)
+        const btnToggleStatus = document.getElementById('btnToggleStatus');
+        const statusCards = document.getElementById('statusCards');
+        if (btnToggleStatus && statusCards) {
+            btnToggleStatus.addEventListener('click', () => {
+                const expanded = btnToggleStatus.getAttribute('aria-expanded') === 'true';
+                if (expanded) {
+                    statusCards.classList.add('collapsed');
+                    btnToggleStatus.setAttribute('aria-expanded', 'false');
+                    btnToggleStatus.title = 'Expand Status Cards';
+                    // increase command log height by ~4 lines to fill the freed space
+                    this.adjustCommandLogForStatus(false);
+                } else {
+                    statusCards.classList.remove('collapsed');
+                    btnToggleStatus.setAttribute('aria-expanded', 'true');
+                    btnToggleStatus.title = 'Collapse Status Cards';
+                    // restore command log height
+                    this.adjustCommandLogForStatus(true);
+                }
+            });
         }
         // Inline open button in the right panel
         const inlineOpen = document.getElementById('btnOpenHistoryInline');
@@ -299,9 +346,9 @@ class CommandHistory {
             btn.style.display = 'none';
         });
         this.gotoBtn = btn;
-        // Append the button inside the scrolling log so we can use `position: sticky`
-        // Sticky keeps it visible at the bottom of the scroll viewport while not scrolling with content.
-        this.logElement.appendChild(btn);
+        // Do not append the button into the scrolling log (that causes layout shifts).
+        // It will be appended into the non-scrolling history panel (or kept un-attached)
+        // and positioned absolutely via CSS so it doesn't affect container height.
     }
 
     attachScrollHandler() {
@@ -321,6 +368,33 @@ class CommandHistory {
         } else {
             this.logElement.classList.add('stale');
             if (this.gotoBtn) this.gotoBtn.style.display = 'block';
+        }
+    }
+
+    /* Adjust the command log max-height when status cards are toggled.
+       When `expanded === false` (status cards collapsed) we increase the
+       max-height by approximately 4 lines so the command log fills the
+       freed vertical space. When `expanded === true` we restore the
+       original max. */
+    adjustCommandLogForStatus(expanded) {
+        if (!this.commandLogEl) return;
+        // determine an approximate line height using one log entry if available
+        let lineHeight = 34; // fallback
+        const sample = this.commandLogEl.querySelector('.log-entry');
+        if (sample) {
+            const rect = sample.getBoundingClientRect();
+            lineHeight = Math.max(24, Math.round(rect.height));
+        }
+        const delta = Math.round(lineHeight * 4);
+        if (expanded) {
+            this.commandLogEl.style.maxHeight = this.defaultCommandLogMax + 'px';
+        } else {
+            this.commandLogEl.style.maxHeight = (this.defaultCommandLogMax + delta) + 'px';
+        }
+        // If the view was near the bottom, keep it scrolled to bottom.
+        if (this.logElement) {
+            const nearBottom = (this.logElement.scrollHeight - (this.logElement.scrollTop + this.logElement.clientHeight) <= 40);
+            if (nearBottom) this.logElement.scrollTop = this.logElement.scrollHeight;
         }
     }
 }

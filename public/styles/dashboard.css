@@ -1,353 +1,196 @@
-/* Robot Control Dashboard Styles - cleaned and theme-aware */
+/* Minimal dashboard stylesheet - essential variables and layout only */
 
-/* CSS Custom Properties (defaults) */
-:root {
-    --bg-top: #1e3c72;
-    --bg-bottom: #2a5298;
-    --header-top: #667eea;
-    --header-bottom: #764ba2;
-    --header-border: #5568d3;
-    --accent: #3b82f6;
-    --accent-2: #6366f1;
-    --accent-border: rgba(59, 130, 246, 0.12);
-    --surface-bg: #f5f8fb; /* slightly muted surface */
-    --card-bg: #f7fafc; /* soft card background (not pure white) */
-    --card-bg-muted: #eef4f8; /* muted card gradient end */
-    --text-primary: #111827;
-    --text-muted: #6b7280;
-    --success: #4ade80;
-    --danger: #ef4444;
-    --warning: #eab308;
-    --console-bg: #0b0b0b;
-    --console-text: #e6e6e6;
-    --select-foreground: #ffffff;
-    --select-bg: rgba(255,255,255,0.08);
-    --select-border: rgba(255,255,255,0.12);
-    --card-border: rgba(15, 23, 42, 0.06);
-    --card-border-strong: rgba(15, 23, 42, 0.10);
-    --panel-shadow: 0 10px 30px rgba(15,23,42,0.08);
-    --dashboard-card-top: #f2f6fb;
-    --dashboard-card-bottom: #f7fbfd;
-    --panel-bg: #f6f9fc; /* default panel/card surface for better contrast */
-    --control-pad-shadow: 0 6px 20px rgba(15,23,42,0.06);
-    --btn-bg: #f1f5f9;
-    --btn-border: #e6eef6;
-    --range-track: #e6eef6;
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
+* { box-sizing: border-box; }
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
-    color: var(--text-primary);
-    min-height: 100vh;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  min-height: 100vh;
 }
 
 .dashboard-container {
-    max-width: 1200px;
-    margin: 24px auto;
-    background: linear-gradient(180deg, var(--theme-dashboard-card-top, var(--dashboard-card-top)) 0%, var(--theme-dashboard-card-bottom, var(--dashboard-card-bottom)) 100%);
-    border-radius: 8px;
-    box-shadow: var(--panel-shadow);
-    display: flex;
-    flex-direction: column;
-    min-height: 90vh; /* allow growth when panels open */
-    height: auto;
-    overflow: visible; /* let panels expand and push content down */
+  /* narrower default width so the card fits comfortably at 100% zoom */
+  max-width: 980px;
+  margin: 12px auto;
+  background: linear-gradient(180deg, var(--theme-dashboard-card-top, var(--dashboard-card-top)) 0%, var(--theme-dashboard-card-bottom, var(--dashboard-card-bottom)) 100%);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  display:flex; flex-direction:column;
+  /* Keep the card finite: allow it to grow up to the viewport but cap
+     on very large screens so it doesn't appear to continue forever when
+     zoomed out. Use `min()`/`max()` fallbacks for compatibility. */
+  min-height: 560px; /* enough to comfortably contain the control panel */
+  max-height: min(1100px, calc(100vh - 24px));
+  padding-bottom: 16px;
+  overflow: visible;
 }
 
-/* Header */
 .dashboard-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 22px;
-    background: linear-gradient(135deg, var(--header-top) 0%, var(--header-bottom) 100%);
-    color: var(--select-foreground);
-    border-bottom: 3px solid var(--header-border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 16px 22px;  
+  /* match the dashboard card appearance while remaining a top-level element */
+  max-width: 980px;
+  margin: 12px auto;
+  background: linear-gradient(180deg, var(--theme-dashboard-card-top, var(--dashboard-card-top)) 0%, var(--theme-dashboard-card-bottom, var(--dashboard-card-bottom)) 100%);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 80;
 }
-.header-left, .header-right { display:flex; align-items:center; gap:12px; }
-.header-center { flex: 1; text-align: center; }
-.dashboard-header h1 { font-size: 20px; margin: 0; font-weight: 700; color: var(--select-foreground); }
-
-.connection-status { display:flex; align-items:center; gap:10px; }
-
-/* Theme picker */
-.theme-picker-wrap { display:flex; align-items:center; gap:8px; }
-.theme-label { font-size: 12px; color: rgba(255,255,255,0.9); }
-.theme-picker-select { padding:6px 10px; border-radius:6px; border: 1px solid var(--select-border); background: var(--select-bg); color: var(--select-foreground); font-size:13px; }
-
-/* status dot */
-.status-dot { display:inline-block; width:12px; height:12px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); background: var(--card-bg); }
-.status-dot.connected { background: var(--success); box-shadow: 0 0 8px rgba(0,0,0,0.12); }
-.status-dot.disconnected { background: var(--danger); box-shadow: 0 0 8px rgba(0,0,0,0.12); }
-
-/* Main layout */
-.dashboard-content { display: grid; grid-template-columns: 1fr 1fr; gap: 0; flex:1; }
-
-/* Control panel */
-.control-panel { padding: 24px; border-right: 1px solid var(--accent-border); background: var(--theme-panel-bg, var(--panel-bg)); overflow-y: auto; }
-.control-panel h2 { margin-bottom: 8px; }
-
-.arrow-pad {
-    display: grid;
-    grid-template-columns: repeat(3, 60px);
-    gap: 10px;
-    padding: 18px;
-    background: var(--card-bg);
-    border-radius: 8px;
-    border: 1px solid var(--card-border);
-    align-items: center;
-    justify-content: center;
-    box-shadow: var(--control-pad-shadow);
+.header-left, .header-center, .header-right 
+{ 
+    display:flex; 
+    align-items:center; 
+    gap:12px; 
 }
-.arrow-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 8px;
-    border: 1px solid var(--btn-border);
-    background: var(--btn-bg);
-    font-size: 20px;
-    cursor: pointer;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s ease;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+
+.header-center {      
+     text-align:center;
+ }
+.dashboard-header h1 { margin:0; font-size:28px; font-weight:600; }
+
+.dashboard-content { 
+  display:grid;
+  /* allocate roughly 33% to control panel and 67% to history/status */
+  grid-template-columns: minmax(260px, 33%) 1fr;
+  gap:0; 
+  flex:1 1 auto; 
+  align-items: stretch; 
+  overflow: visible; 
 }
-.arrow-btn:hover {
-    background: var(--accent);
-    color: var(--select-foreground);
-    transform: scale(1.05);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+
+.control-panel, .history-panel {
+  padding: 20px;
+  background: linear-gradient(180deg, var(--theme-panel-top, var(--panel-top)) 0%, var(--theme-panel-bottom, var(--panel-bottom)) 100%);
+  border: 1px solid var(--theme-panel-border, var(--panel-border));
+  box-shadow: var(--theme-panel-shadow, var(--panel-shadow));
+  display: flex; flex-direction: column; min-height: 0; /* allow proper flex children sizing */
 }
-.arrow-btn.processing { background: var(--danger) !important; color: white !important; border-color: var(--danger); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
-.arrow-pad.processing { box-shadow: inset 0 0 0 2px rgba(239,68,68,0.06); }
+
+.control-panel { border-right: none; }
+
+.arrow-pad { display:grid; grid-template-columns: repeat(3, 64px); gap:12px; padding: 18px; border-radius:10px; background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,252,255,0.9)); border:1px solid var(--card-border); box-shadow: 0 6px 20px rgba(15,23,42,0.04); align-items:center; justify-content:center; }
+.arrow-btn { width:64px; height:64px; border-radius:10px; border:1px solid rgba(0,0,0,0.06); background: rgba(255,255,255,0.98); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-primary); transition: transform .12s ease, box-shadow .12s ease; }
+.arrow-btn:hover { background: var(--accent); color: #fff; transform: translateY(-2px); box-shadow: 0 8px 22px rgba(59,130,246,0.12); }
+.arrow-btn.processing { background: var(--danger, #ef4444) !important; color:#fff; border-color: var(--danger, #ef4444); }
+
+.arrow-row { grid-column: 1 / 4; display:flex; gap:12px; align-items:center; justify-content:center; }
 .arrow-up { grid-column: 2; }
-.arrow-row { grid-column: 1 / 4; display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; align-items:center; justify-content:center; }
-.arrow-left { grid-column:1; }
-.arrow-right { grid-column:3; }
-.arrow-down { grid-column:2; }
+.arrow-left { }
+.arrow-right { }
+.arrow-down { grid-column: 2; }
 .arrow-center { text-align:center; font-size:12px; color:var(--text-muted); }
 
-/* Numeric inputs */
-.numeric-inputs { margin-top: 18px; display:flex; flex-direction:column; gap:12px; }
-.input-group label { font-size:12px; color:var(--text-muted); margin-bottom:6px; display:block; }
-input[type="range"] { width:100%; background: transparent; accent-color: var(--accent); }
-/* Reuse default range thumb styling later in file */
+.numeric-inputs { margin-top:18px; display:flex; flex-direction:column; gap:12px; }
+.input-group { display: grid; grid-template-columns: 120px 1fr 48px; gap: 12px; align-items: center; margin-bottom: 8px; }
+.input-group label { margin: 0; font-size:14px; color:var(--text-muted); }
+.input-group input[type="range"] { width: 100%; }
+.input-group span { text-align: left; font-size:13px; color:var(--text-muted); }
 
-.processing-message { padding:10px 12px; border-radius:6px; background: rgba(239,68,68,0.06); border-left:4px solid var(--danger); color:var(--danger); font-weight:700; margin-top:12px; }
-.processing-message.hidden { display:none; }
-.processing-message.visible { display:block; }
-
-/* History & status panel */
-.history-panel { padding: 24px; overflow: visible; background: var(--theme-panel-bg, var(--panel-bg)); display: flex; flex-direction: column; }
-.history-panel h2 { margin-bottom:12px; }
-.history-section { display:flex; flex-direction: column; gap:12px; }
 .history-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.history-header h3 { margin:0; }
-.history-actions { display:flex; gap:8px; align-items:center; }
-.btn-small { padding:6px 8px; font-size:13px; border-radius:6px; }
-.history-actions .btn { box-shadow: 0 4px 10px rgba(15,23,42,0.06); }
-.command-log { background: var(--panel-bg, #ffffff); border:1px solid var(--card-border); border-radius:6px; padding:12px; max-height:380px; min-height:220px; overflow-y:auto; font-family: 'Courier New', monospace; font-size:12px; flex: 1 1 auto; }
-.log-empty { color: var(--text-muted); text-align:center; padding:20px; font-style:italic; }
+.history-panel { display:flex; flex-direction:column; position: relative; min-height: 0; }
+.history-section { display:flex; flex-direction:column; gap:12px; flex: 1 1 auto; min-height: 0; }
+.history-actions .btn { margin-left:8px; }
+.btn-ghost { background: transparent; border:1px solid var(--card-border); padding:6px 10px; border-radius:8px; color:var(--text-primary); }
+.btn-ghost:hover { background: rgba(15,23,42,0.03); }
+.command-log { background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, var(--theme-panel-bottom, var(--panel-bottom)) 100%); border:1px solid var(--card-border); border-radius:8px; padding:12px; box-shadow: 0 6px 18px rgba(15,23,42,0.04); padding-bottom:28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
-/* Command log: stale indicator and goto-latest button */
-.command-log { position: relative; }
-.command-log.stale { border: 2px solid var(--danger); box-shadow: 0 6px 18px rgba(239,68,68,0.06); }
+/* Limit command log height to roughly 10 entries to prevent the card
+  from growing indefinitely; it will scroll internally when more items are added. */
+.command-log { max-height: 340px; }
 
-/* Make command log visually stronger against dashboard background */
-.command-log { box-shadow: 0 4px 10px rgba(15,23,42,0.04); }
-.goto-latest {
-    position: -webkit-sticky; /* Safari */
-    position: sticky;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 12px;
-    background: var(--accent);
-    color: var(--select-foreground);
-    border: none;
-    padding: 8px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: none;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.14);
-    z-index: 1200;
-    margin: 0 auto; /* center inside flow */
-    align-self: center;
-}
-/* show when parent (history-panel) is marked stale or command-log is stale */
-.history-panel .goto-latest { display: none; }
-.command-log.stale .goto-latest { display: block; }
+/* Absolute-positioned goto button inside history panel to avoid layout shifts */
+.goto-latest { display:none; position:absolute; left:50%; transform: translateX(-50%); bottom:18px; right: auto; background: var(--accent, #1e90ff); color: var(--select-foreground, #fff); border:none; padding:10px 14px; border-radius:20px; box-shadow:0 14px 34px rgba(15,23,42,0.18); cursor:pointer; z-index:3000; font-weight:700; }
+.goto-latest:hover { filter: brightness(0.95); box-shadow:0 18px 40px rgba(15,23,42,0.22); }
+.history-panel .goto-latest { display:inline-block; }
 
-/* Buttons */
-button { padding:10px 12px; border-radius:6px; border:none; cursor:pointer; }
-.btn-status { background: var(--accent); color: var(--select-foreground); }
-.btn-settings { background: transparent; color: var(--select-foreground); font-size:18px; border:none; }
+.log-entry { display:flex; gap:12px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,0.03); align-items:flex-start; }
+.log-timestamp { color:var(--text-muted); font-weight:600; width:92px; font-size:12px; }
+.log-text { color:var(--text-primary); white-space:pre-wrap; font-family: 'Courier New', monospace; font-size:13px; }
+.log-error { color:var(--danger, #ef4444); font-weight:700; }
+.log-success { color:var(--success, #4ade80); font-weight:700; }
 
-/* Console */
-.comm-console { background: var(--console-bg); color: var(--console-text); font-family: monospace; font-size:12px; padding:8px; min-height:160px; max-height:520px; overflow-y:auto; border-radius:4px; border:1px solid var(--card-border); white-space: pre-wrap; }
-
-/* Small helpers */
-.log-entry { display:flex; gap:8px; padding:8px; border-bottom:1px solid var(--card-border); }
-.log-timestamp { color: var(--text-muted); font-weight:600; width:90px; }
-.log-command { color: var(--text-primary); }
-.log-success { color: var(--success); }
-.log-error { color: var(--danger); }
-
-/* Range thumb styling */
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); border:2px solid #fff; }
-input[type="range"]::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; border:2px solid #fff; }
-
-/* Track styling for better visibility */
-input[type="range"]::-webkit-slider-runnable-track { height:6px; border-radius:6px; background: var(--range-track); }
-input[type="range"]::-moz-range-track { height:6px; border-radius:6px; background: var(--range-track); }
-
-/* Responsive */
-@media (max-width: 840px) {
-    .dashboard-content { grid-template-columns: 1fr; }
-    .header-center { order: 2; }
-    .header-left, .header-right { order: 1; }
-    .dashboard-container { height: auto; }
-}
-
-/* Collapsible settings/telemetry/console panels
-   Panels remain in the normal document flow so multiple panels stack
-   and naturally push the main content down. Collapse is driven by
-   max-height + padding to allow smooth transitions (avoid display:none).
-*/
-.settings-panel {
-    background: var(--theme-surface-bg, var(--surface-bg));
-    border-bottom: 1px solid var(--accent-border);
-    overflow: hidden;
-    transition: max-height 0.28s ease, padding 0.28s ease;
-    max-height: 0; /* collapsed by default */
-    padding: 0;    /* collapsed padding */
-    position: relative; /* keep in flow */
-}
-.settings-panel.hidden {
-    /* keep element in flow but collapsed so it still occupies no height */
-    max-height: 0;
-    padding: 0;
-}
-.settings-panel.visible {
-    max-height: 720px;
-    padding: 12px 20px;
-}
-
-/* spacing between stacked panels */
-.settings-panel + .settings-panel { margin-top: 8px; }
-
-.settings-content { padding: 8px 12px; }
-
-/* Connection card styling */
-.connection-card {
-    background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-muted) 100%);
-    border: 1px solid var(--card-border-strong);
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 12px;
-    box-shadow: 0 6px 18px rgba(15,23,42,0.03);
-}
-.connection-actions { display:flex; gap:12px; align-items:center; }
-.connection-hint { margin-top:8px; font-size:12px; color:var(--text-muted); }
-
-/* Button styles used inside connection card */
-.btn { font-weight:600; border-radius:6px; padding:8px 12px; cursor:pointer; }
-.btn-primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--select-foreground); border: none; }
-.btn-primary[disabled], .btn.btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
-.btn-ghost { background: transparent; border: 1px solid var(--card-border-strong); color: var(--text-primary); }
-.btn-ghost[disabled] { opacity: 0.5; cursor: not-allowed; }
-.btn-ghost:hover { background: rgba(15,23,42,0.02); }
-
-/* Persistent connection card placement */
-.persistent-connection-card { display:flex; justify-content:center; margin: 12px 0; }
-
-/* Status cards (connected / mode / last update) */
 .status-cards { display:flex; gap:12px; margin-bottom:12px; }
-.status-small-card { background: var(--card-bg); border:1px solid var(--card-border); padding:10px 12px; border-radius:8px; box-shadow: 0 6px 18px rgba(15,23,42,0.04); min-width:120px; text-align:center; }
+.status-cards.collapsed { display: none; }
+
+/* Status toggle (bigger, link-like, mobile-friendly) */
+.status-toggle {
+  background: transparent;
+  border: none;
+  color: var(--accent, #1e90ff);
+  font-size: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  margin-left: 4px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.status-toggle:hover { text-decoration: underline; background: rgba(30,144,255,0.04); }
+.status-toggle:focus { outline: 2px solid rgba(30,144,255,0.18); outline-offset: 2px; }
+.status-toggle .toggle-icon { display:inline-block; transition: transform .18s ease; font-size: 18px; }
+.status-toggle[aria-expanded="true"] .toggle-icon { transform: rotate(0deg); }
+.status-toggle[aria-expanded="false"] .toggle-icon { transform: rotate(-90deg); }
+.status-small-card { background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-muted)); border:1px solid var(--card-border); padding:10px 12px; border-radius:10px; box-shadow: 0 6px 18px rgba(15,23,42,0.03); min-width:120px; text-align:center; }
+.status-cards { margin-bottom:16px; }
+.status-small-card { border:1px solid rgba(15,23,42,0.08); padding:12px 14px; border-radius:12px; box-shadow: 0 10px 30px rgba(15,23,42,0.07); min-width:140px; transition: transform .12s ease, box-shadow .12s ease; }
+.status-small-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(15,23,42,0.09); }
 .status-small-card .label { font-size:12px; color:var(--text-muted); margin-bottom:6px; }
 .status-small-card .value { font-weight:700; }
-.status-small-card.ok { border-color: rgba(34,197,94,0.5); background: linear-gradient(180deg, rgba(34,197,94,0.06), var(--card-bg)); }
-.status-small-card.alert { border-color: rgba(239,68,68,0.5); background: linear-gradient(180deg, rgba(239,68,68,0.04), var(--card-bg)); }
 
-/* Connection settings - horizontal layout on wide screens */
-.settings-content .settings-group {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-    align-items: center;
+.comm-console { background:#0b0b0b; color:#e6e6e6; font-family:monospace; padding:8px; border-radius:6px; min-height:160px; overflow:auto; }
+
+.settings-panel { overflow:hidden; transition: max-height 0.28s ease, padding 0.28s ease; max-height:0; padding:0; }
+.settings-panel.visible { max-height:720px; padding:12px 20px; }
+
+/* Panel wrap constrains top widgets to the dashboard width and centers them */
+.panel-wrap { max-width: 980px; margin: 12px auto; padding: 0; box-sizing: border-box; display:flex; flex-direction:column; gap:12px; }
+/* Make widget panels look like separate cards sitting between header and main card */
+.panel-wrap .settings-panel {
+  background: linear-gradient(180deg, var(--theme-panel-top, #ffffff) 0%, var(--theme-panel-bottom, #f7fbff) 100%);
+  border: 1px solid rgba(15,23,42,0.06);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.06);
+  padding: 12px 22px;
+  transition: max-height 0.28s ease, padding 0.28s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+.panel-wrap .settings-content { background: transparent; padding: 0; }
+
+/* Keep header visually above panels when panels expand */
+.dashboard-header { position: relative; z-index: 60; }
+
+/* Ensure panels don't visually merge with the dashboard card below */
+.panel-wrap .settings-panel + .settings-panel { margin-top: 6px; }
+
+/* Hide collapsed panels completely (no visible rounded bars) */
+.panel-wrap .settings-panel.hidden { display: none; }
+
+select.theme-picker-select 
+{ 
+    background: linear-gradient(180deg,
+    var(--theme-panel-top, #EDF6FF) 0%,
+    var(--theme-panel-bottom, #E6F1FF) 100%);
+    border: 1px solid rgba(0,0,0,0.06);
+    color: var(--text-primary);
 }
 
-.settings-panel .input-group {
-    display: flex;
-    flex-direction: row;
-    gap: 8px;
-    align-items: center;
-}
-.settings-panel .input-group label {
-    min-width: 90px;
-    margin: 0;
-    text-align: left;
-}
-.settings-panel .input-group input[type="text"],
-.settings-panel .input-group input[type="number"],
-.settings-panel .input-group select {
-    flex: 1 1 auto;
-    max-width: 320px;
-}
+button { padding:8px 12px; border-radius:6px; border:none; cursor:pointer; }
+.btn-primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--select-foreground); }
 
-@media (max-width: 640px) {
-    .settings-panel .input-group { flex-direction: column; align-items: stretch; }
-    .settings-panel .input-group label { min-width: 0; }
-}
+/* Small helpers kept for JS hooks */
+.processing-message { padding:10px; border-left:4px solid #ef4444; display:none; }
+.processing-message.visible { display:block; }
 
-/* Hybrid restore tweaks: bring back some older visual cues while keeping fixes
-   - Slightly larger header title
-   - Telemetry pop-down (status-bar) styling restored to clearer card look
-   - Telemetry button tightened to match header action buttons
-*/
-.dashboard-header h1 {
-    font-size: 28px; /* restore larger title */
-    font-weight: 600;
-    letter-spacing: 0.2px;
-}
+/* keep monospace class used for logs */
+.log-empty { color: var(--text-muted); text-align:center; padding:20px; font-style:italic; }
 
-.btn-telemetry {
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.14);
-    color: var(--select-foreground);
-    padding: 6px 8px;
-    border-radius: 6px;
-    font-size: 16px;
-    line-height: 1;
-    cursor: pointer;
-}
-.btn-telemetry:hover { background: rgba(255,255,255,0.04); }
+/* responsive */
+@media (max-width: 840px) { .dashboard-content { grid-template-columns: 1fr; } .header-center { order:2; } }
 
-/* Telemetry panel visual improvements (hybrid) */
-#telemetryPanel .settings-content { padding: 12px 14px; }
-#telemetryPanel .status-bar {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    padding: 12px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.04);
-    min-height: 64px;
-}
-
-.status-bar .telemetry-item {
-    display:flex; justify-content:space-between; align-items:center; gap:12px;
-    padding:8px 6px; border-bottom: 1px solid var(--accent-border);
-}
-.status-bar .telemetry-item:last-child { border-bottom: none; }
-.status-bar .telemetry-key { color: var(--text-muted); font-weight:600; width:160px; }
-.status-bar .telemetry-value { color: var(--text-primary); font-weight:700; }
-
-/* Make Request Status button a touch target but visually consistent */
-#telemetryPanel .btn-status { padding:8px 12px; border-radius:6px; }
-
-
-
+/* End minimal dashboard styles */

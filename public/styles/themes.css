@@ -1,5 +1,17 @@
 /* Theme presets override CSS variables based on [data-theme] attribute on <html> */
 
+:root:not([data-theme]) {
+/* Default / explicit 'no theme' values (override theme-aware vars) */
+  --theme-panel-top: #c7effb;
+  --theme-panel-bottom: #789cb7;
+  --theme-panel-bg: #3e946c8b;
+  --theme-panel-border: rgba(59,130,246,0.06);
+  --theme-panel-shadow: 0 10px 24px rgba(59,130,246,0.04);
+  --theme-dashboard-card-top: #91bcc943;
+  --theme-dashboard-card-bottom: #4f95b7;
+  --theme-surface-bg: #162b41;
+}
+
 /* Angelic - light, pastel, airy */
 :root[data-theme="angelic"] {
   --bg-top: #f0f9ff;

@@ -8,18 +8,25 @@
     <link rel="stylesheet" href="/get_style/themes.css">
 </head>
 <body>
-    <div class="dashboard-container">
-        <!-- Header -->
+    <!-- Panels are placed outside the main dashboard card so opening them
+         pushes the card down and creates a page scrollbar instead of
+         overlapping content. -->
+    
+
+        
+        <!-- Header (top-level, remains visually on top) -->
         <header class="dashboard-header">
             <div class="header-left">
                 <div class="theme-picker-wrap">
-                    <span class="theme-label">Theme</span>
+                    <span class="theme-label">Theme: </span>
                     <select id="themePicker" class="theme-picker-select" title="Select theme">
                         <option value="default">Default</option>
                         <option value="angelic">Angelic</option>
                         <option value="demonic">Demonic</option>
                         <option value="industrial">Industrial</option>
                         <option value="cyberpunk">Cyberpunk</option>
+                        <option value="coolgray">Cool Gray</option>
+                        <option value="warmcream">Warm Cream</option>
                     </select>
                 </div>
             </div>
@@ -31,88 +38,87 @@
             <div class="header-right">
                 <div class="connection-status">
                     <span id="statusIndicator" class="status-dot connected"></span>
-                    <span id="statusText">Connected</span>
-                    <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
+                    <span id="statusText">Connected</span>                    
                     <button id="btnTelemetry" class="btn-telemetry" title="Telemetry">📡</button>
                     <button id="btnConsole" class="btn-console" title="Raw Message Console">💬</button>
+                    <button id="btnSettings" class="btn-settings" title="Settings & Connection">⚙️</button>
                 </div>
             </div>
         </header>
 
-        <!-- Settings Panel (Collapsible) -->
-        <div id="settingsPanel" class="settings-panel hidden">
-            <div class="settings-content">
-                <h3>Connection Settings</h3>
-                <div class="settings-group">
-                    <div class="input-group">
-                        <label for="robotIP">Robot IP Address:</label>
-                        <input type="text" id="robotIP" value="localhost" placeholder="IP address">
-                    </div>
-                    <div class="input-group">
-                        <label for="robotPort">Port:</label>
-                        <input type="number" id="robotPort" value="5000" min="1" max="65535">
-                    </div>
-                    <div class="input-group">
-                        <label for="socketType">Socket Type:</label>
-                        <select id="socketType">
-                            <option value="0">TCP</option>
-                            <option value="1">UDP</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="connection-card">
-                    <div class="connection-actions">
-                        <button id="btnConnect" class="btn btn-primary btn-connect">Connect</button>
-                        <button id="btnDisconnect" class="btn btn-ghost btn-disconnect">Disconnect</button>
-                    </div>
-                    <div class="connection-hint">Tip: use TCP for reliable control; UDP for low-latency telemetry.</div>
-                </div>
-                <div class="settings-status">
-                    <p>Status: <span id="connectionStatus">Initializing...</span></p>
-                    <p>Mode: <span id="connectionMode">--</span></p>
-                </div>
-            </div>
+        <!-- Panels placed beneath the header so they appear above the main card content -->
+        <div class="panel-wrap">
+          <!-- Settings Panel (Collapsible) -->
+          <div id="settingsPanel" class="settings-panel hidden">
+              <div class="settings-content">
+                  <h3>Connection Settings</h3>
+                  <div class="settings-group">
+                      <div class="input-group">
+                          <label for="robotIP">Robot IP Address:</label>
+                          <input type="text" id="robotIP" value="localhost" placeholder="IP address">
+                      </div>
+                      <div class="input-group">
+                          <label for="robotPort">Port:</label>
+                          <input type="number" id="robotPort" value="5000" min="1" max="65535">
+                      </div>
+                      <div class="input-group">
+                          <label for="socketType">Socket Type:</label>
+                          <select id="socketType">
+                              <option value="0">TCP</option>
+                              <option value="1">UDP</option>
+                          </select>
+                      </div>
+                  </div>
+                  <div class="connection-card">
+                      <div class="connection-actions">
+                          <button id="btnConnect" class="btn btn-primary btn-connect">Connect</button>
+                          <button id="btnDisconnect" class="btn btn-ghost btn-disconnect">Disconnect</button>
+                      </div>
+                      <div class="connection-hint">Tip: use TCP for reliable control; UDP for low-latency telemetry.</div>
+                  </div>
+                  <div class="settings-status">
+                      <p>Status: <span id="connectionStatus">Initializing...</span></p>
+                      <p>Mode: <span id="connectionMode">--</span></p>
+                  </div>
+              </div>
+          </div>
+
+          <!-- Telemetry Status Bar Pop-down (hidden by default) -->
+          <div id="telemetryPanel" class="settings-panel hidden">
+              <div class="settings-content">
+                  <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
+                      <h3 style="margin:0">Telemetry Status</h3>
+                      <div>
+                          <button id="btnStatus" class="btn-status">Request Status</button>
+                      </div>
+                  </div>
+                  <div class="status-bar" id="statusBar">
+                      <p class="log-empty">No telemetry data received yet.</p>
+                  </div>
+
+                  <!-- Telemetry uses the main Connection Settings widget for connect/disconnect actions -->
+              </div>
+          </div>
+
+          <!-- Comm Console Pop-down (hidden by default) -->
+          <div id="consolePanel" class="settings-panel hidden">
+              <div class="settings-content">
+                  <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
+                      <h3 style="margin:0">Raw Message Console</h3>
+                      <div>
+                          <button id="btnClearConsole" class="btn-clear-console">Clear</button>
+                          <label class="console-auto-scroll" style="margin-left:8px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+                      </div>
+                  </div>
+                  <div id="commConsole" class="comm-console" aria-live="polite"></div>
+              </div>
+          </div>
         </div>
 
-        <!-- Telemetry Status Bar Pop-down (hidden by default) -->
-        <div id="telemetryPanel" class="settings-panel hidden">
-            <div class="settings-content">
-                <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
-                    <h3 style="margin:0">Telemetry Status</h3>
-                    <div>
-                        <button id="btnStatus" class="btn-status">Request Status</button>
-                    </div>
-                </div>
-                <div class="status-bar" id="statusBar">
-                    <p class="log-empty">No telemetry data received yet.</p>
-                </div>
+    <!-- Panels are above the main dashboard card; header is separate top element -->
 
-                <!-- Connection card inside telemetry widget -->
-                <div class="connection-card telemetry-connection-card" style="margin-top:12px;">
-                    <div class="connection-actions" style="justify-content:center;">
-                        <button id="btnConnectPersist" class="btn btn-primary btn-connect">Connect</button>
-                        <button id="btnDisconnectPersist" class="btn btn-ghost btn-disconnect">Disconnect</button>
-                    </div>
-                    <div class="connection-hint">Quick connect (telemetry)</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Comm Console Pop-down (hidden by default) -->
-        <div id="consolePanel" class="settings-panel hidden">
-            <div class="settings-content">
-                <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
-                    <h3 style="margin:0">Raw Message Console</h3>
-                    <div>
-                        <button id="btnClearConsole" class="btn-clear-console">Clear</button>
-                        <label class="console-auto-scroll" style="margin-left:8px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
-                    </div>
-                </div>
-                <div id="commConsole" class="comm-console" aria-live="polite"></div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
+    <!-- Main Content -->
+    <div class="dashboard-container">
         <div class="dashboard-content">
             <!-- Control Panel (Left) -->
             <div class="control-panel">
@@ -135,9 +141,9 @@
                 <div class="numeric-inputs">
                     <h3>Parameters</h3>
                     <div class="input-group">
-                        <label for="duration">Duration (s):</label>
-                        <input type="range" id="duration" value="2" min="1" max="10" step="1">
-                        <span id="durationDisplay">2s</span>
+                        <label for="duration">Duration:</label>
+                        <input type="range" id="duration" value="1" min="1" max="10" step="1">
+                        <span id="durationDisplay">1s</span>
                     </div>
                     <div class="input-group">
                         <label for="power">Power:</label>
@@ -155,8 +161,15 @@
 
             <!-- History & Status Panel (Right) -->
             <div class="history-panel">
-                <h2>Status & History</h2>
-                
+                <div class="history-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <h2 style="margin:0; display:flex; align-items:center; gap:8px;">
+                        <span>Status & History</span>
+                        <button id="btnToggleStatus" class="status-toggle" aria-expanded="true" title="Collapse Status Cards">
+                            <span class="toggle-icon">▾</span>
+                        </button>
+                    </h2>
+                </div>
+
                 <div class="status-cards" id="statusCards">
                     <div id="statusCardConnection" class="status-small-card">
                         <div class="label">Connection</div>
@@ -176,7 +189,6 @@
                     <div class="history-header">
                         <h3>Command History</h3>
                         <div class="history-actions">
-                            <button id="btnExportHistory" class="btn btn-ghost btn-small">Export JSON</button>
                             <button id="btnClearHistory" class="btn btn-ghost btn-small">Clear History</button>
                         </div>
                     </div>

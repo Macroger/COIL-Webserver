@@ -14,6 +14,9 @@
 #include <atomic>
 #include "MySocket.h"
 #include "pktdef.h"
+// httplib must come after MySocket.h — httplib defines INVALID_SOCKET as a macro
+// on non-Windows platforms, which conflicts with MySocket's constexpr of the same name.
+#include <httplib.h>
 
 using namespace std;
 
@@ -36,6 +39,12 @@ int main()
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
 	std::mutex socketMutex;
 	int pktCounter = 0;
+
+	// Relay mode state — when active, commands are forwarded via HTTP to a downstream server (PC3)
+	// instead of being sent as raw robot protocol packets directly to the robot.
+	bool relayMode = false;
+	std::string relayHost;
+	int relayPort = 30333;
 
 	// Command and Control GUI for robot - serves the main page of the web interface
 	CROW_ROUTE(app, "/")
@@ -260,8 +269,30 @@ int main()
 	// PUT /robot/telecommand - Build and send a real packet, return simulator response
 	// Expected JSON: { "command": "DRIVE"|"SLEEP"|"STATUS", "direction": "FORWARD"|"BACKWARD"|"LEFT"|"RIGHT", "duration": <int>, "power": <int> }
 	CROW_ROUTE(app, "/robot/telecommand").methods("PUT"_method)
-	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res)
 	{
+		// Relay mode: forward the request as-is to the downstream server (PC3)
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Put("/robot/telecommand", req.body, "application/json");
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 503;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Relay server unreachable"})");
+			}
+			res.end();
+			return;
+		}
+
 		auto body = crow::json::load(req.body);
 
 		if (!body)
@@ -451,26 +482,57 @@ int main()
 		return true;
 	};	
 
-	// POST /robot/connect - Configure and connect to robot
+	// POST /robot/connect - Configure and connect to robot or relay server
 	CROW_ROUTE(app, "/robot/connect/<string>/<int>/<string>").methods("POST"_method)
-	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
 	{
-		
-		// Replace with:
-		coil::protocol::ConnectionType connType = (modeStr == "udp") ? coil::protocol::ConnectionType::UDP
-			: coil::protocol::ConnectionType::TCP;
-		
-		int mode = (modeStr == "udp") ? 1 : 0;
+		// Relay mode: store PC3 address, verify it is reachable, skip socket setup
+		if (modeStr == "relay")
+		{
+			httplib::Client cli(ip, port);
+			cli.set_connection_timeout(5);
+			auto r = cli.Get("/robot/check-connection");
 
+			auto response = crow::json::wvalue();
+			if (r && r->status == 200)
+			{
+				std::lock_guard<std::mutex> lock(socketMutex);
+				relayMode = true;
+				relayHost = ip;
+				relayPort = port;
+				socketMgr = nullptr;
+
+				response["status"]    = "success";
+				response["message"]   = "Relay connected to " + ip + ":" + std::to_string(port);
+				response["ip"]        = ip;
+				response["port"]      = port;
+				response["mode"]      = 2;
+				response["timestamp"] = static_cast<long long>(std::time(nullptr));
+				res.code = 200;
+			}
+			else
+			{
+				response["status"]  = "error";
+				response["message"] = "Cannot reach relay server at " + ip + ":" + std::to_string(port);
+				res.code = 500;
+			}
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
+			res.end();
+			return;
+		}
+
+		// Direct mode (TCP or UDP): open a socket to the robot/simulator
+		int mode = (modeStr == "udp") ? 1 : 0;
 		uint bufferSize = coil::protocol::constants::DEFAULT_SIZE;
 
 		std::lock_guard<std::mutex> lock(socketMutex);
-		
+		relayMode = false;
+
 		try
-		{			
+		{
 			auto connType = static_cast<coil::protocol::ConnectionType>(mode);
 
-			// then construct the socket using connType:
 			socketMgr = std::make_shared<coil::protocol::MySocket>(
 				coil::protocol::SocketType::CLIENT,
 				connType,
@@ -479,19 +541,17 @@ int main()
 				ip
 			);
 
-			// if TCP, call ConnectTCP()
-			if (connType == coil::protocol::ConnectionType::TCP) {
+			if (connType == coil::protocol::ConnectionType::TCP)
 				socketMgr->ConnectTCP();
-			}
-			
+
 			auto response = crow::json::wvalue();
-			response["status"] = "success";
-			response["message"] = "Connected to robot";
-			response["ip"] = ip;
-			response["port"] = port;
-			response["mode"] = mode;
+			response["status"]    = "success";
+			response["message"]   = "Connected to robot";
+			response["ip"]        = ip;
+			response["port"]      = port;
+			response["mode"]      = mode;
 			response["timestamp"] = static_cast<long long>(std::time(nullptr));
-			
+
 			res.code = 200;
 			res.set_header("Content-Type", "application/json");
 			res.write(response.dump());
@@ -504,14 +564,39 @@ int main()
 			res.end();
 			return;
 		}
-		
+
 		res.end();
 	});
 
 	// POST /robot/disconnect - Disconnect from robot
 	CROW_ROUTE(app, "/robot/disconnect").methods("POST"_method)
-	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res)
 	{
+		// Relay mode: forward disconnect to PC3 then clear relay state
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Post("/robot/disconnect", "", "application/json");
+
+			relayMode = false;
+
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 200;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"json({"status":"success","message":"Relay disconnected (no response from server)"})json");
+			}
+			res.end();
+			return;
+		}
+
 		auto response = crow::json::wvalue();
 		response["status"] = "success";
 		response["message"] = "Disconnected from robot";
@@ -573,11 +658,26 @@ int main()
 
 	// GET /robot/check-connection - Check current connection status
 	CROW_ROUTE(app, "/robot/check-connection").methods("GET"_method)
-	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](crow::request& req, crow::response& res)
 	{
-		// Mock response - TODO: Replace with actual connection check
 		auto response = crow::json::wvalue();
-		response["connected"] = (socketMgr ? socketMgr->IsConnected() : false);
+
+		if (relayMode)
+		{
+			// In relay mode we're "connected" if PC3 is reachable and connected
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(3);
+			auto r = cli.Get("/robot/check-connection");
+			response["connected"] = (r && r->status == 200);
+			response["relay"]     = true;
+			response["relay_host"] = relayHost;
+			response["relay_port"] = relayPort;
+		}
+		else
+		{
+			response["connected"] = (socketMgr ? socketMgr->IsConnected() : false);
+			response["relay"]     = false;
+		}
 		response["status"] = "active";
 		response["message"] = "Connection is active";
 		response["timestamp"] = static_cast<long long>(std::time(nullptr));
@@ -590,19 +690,41 @@ int main()
 
 	// GET /robot/telemetry - Request robot status/telemetry
 	CROW_ROUTE(app, "/robot/telemetry_request").methods("GET"_method)
-	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](crow::request& req, crow::response& res)
 	{
+		// Relay mode: forward telemetry request to PC3
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Get("/robot/telemetry_request");
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 503;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Relay server unreachable"})");
+			}
+			res.end();
+			return;
+		}
+
 		auto response = crow::json::wvalue();
 		coil::protocol::RobotTelemetry telemetryPkt;
 
 		try
 		{
 			std::lock_guard<std::mutex> lock(socketMutex);
-			if (socketMgr) 
+			if (socketMgr)
 			{
 				telemetryPkt = socketMgr->GetTelemetry();
 			}
-			else 
+			else
 			{
 				response["status"] = "error";
 				response["message"] = "No active connection to get telemetry from robot";
@@ -656,7 +778,7 @@ int main()
 		res.end();
 	});
 
-	app.port(23500).multithreaded().run();
+	app.port(30333).multithreaded().run();
 
 	return 0;
 }

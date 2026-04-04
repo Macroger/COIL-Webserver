@@ -84,6 +84,15 @@ target_include_directories(
 )
 
 # --------------------------
+# cpp-httplib (header-only HTTP client used by relay mode)
+# --------------------------
+target_include_directories(
+  COIL_WEBSERVER
+  SYSTEM PRIVATE
+    external/httplib
+)
+
+# --------------------------
 # ASIO (used by Crow / webserver only)
 # --------------------------
 FetchContent_Declare(

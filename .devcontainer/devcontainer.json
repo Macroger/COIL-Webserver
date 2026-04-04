@@ -7,7 +7,7 @@
 	},
 
 	// Forward the webserver port so the browser on the host can reach it
-	"forwardPorts": [23500],
+	"forwardPorts": [30333],
 
 	// Clone Crow header library into external/crow if not already present.
 	// ASIO is fetched automatically by CMake FetchContent at build time.

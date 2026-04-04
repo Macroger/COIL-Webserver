@@ -5,7 +5,8 @@
 
 const ConnectionType = Object.freeze({
     TCP: 0,
-    UDP: 1
+    UDP: 1,
+    RELAY: 2
 });
 
 class ConnectionConfig {
@@ -48,8 +49,10 @@ class ConnectionConfig {
         // Simulator preset button
         if (this.btnConnectSim) {
             this.btnConnectSim.addEventListener('click', () => {
-                const isUDP = parseInt(this.socketType.value) === ConnectionType.UDP;
-                this.robotIP.value = '10.172.41.150';
+                const mode = parseInt(this.socketType.value);
+                if (mode === ConnectionType.RELAY) return; // relay target is PC3, not the sim
+                const isUDP = mode === ConnectionType.UDP;
+                this.robotIP.value = '192.168.118.102';
                 this.robotPort.value = isUDP ? '29500' : '29000';
 
                 // Flash the filled fields so the user sees the change
@@ -107,22 +110,11 @@ class ConnectionConfig {
             // Also show outgoing connect in raw console
             window.robotController?.appendConsole(`OUTGOING: /robot/connect -> ${JSON.stringify(outgoingEntry.request)}`);
 
-            const modeStr = mode === ConnectionType.UDP ? 'udp' : 'tcp';
+            const modeStr = mode === ConnectionType.UDP ? 'udp' : mode === ConnectionType.RELAY ? 'relay' : 'tcp';
             const response = await fetch(`/robot/connect/${encodeURIComponent(ip)}/${port}/${modeStr}`, {
                 method: 'POST'});
-            // const response = await fetch('/robot/connect', {
-            //     method: 'POST',
-            //     headers: {
-            //         'Content-Type': 'application/json'
-            //     },
-            //     body: JSON.stringify({
-            //         ip: ip,
-            //         port: port,
-            //         mode: mode
-            //     })
-            // });
 
-            const modeLabel = mode === ConnectionType.TCP ? 'TCP' : 'UDP';
+            const modeLabel = mode === ConnectionType.TCP ? 'TCP' : mode === ConnectionType.UDP ? 'UDP' : 'Relay';
 
             if (response.ok) {
                 const data = await response.json();
@@ -339,7 +331,7 @@ class ConnectionConfig {
         if (statusText) statusText.textContent = displayText;
 
         // Update mode display
-        const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : 'UDP';
+        const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : this.currentMode === ConnectionType.UDP ? 'UDP' : 'Relay';
         this.connectionStatus.textContent = this.isConnected ? 'Connected' : 'Disconnected';
         this.connectionMode.textContent = `(${modeLabel})`;
         this.lastIP.textContent = this.currentIP;

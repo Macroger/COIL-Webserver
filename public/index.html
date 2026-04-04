@@ -72,21 +72,6 @@
             </div>
         </div>
 
-        <!-- Telemetry Status Bar Pop-down (hidden by default) -->
-        <div id="telemetryPanel" class="settings-panel hidden">
-            <div class="settings-content">
-                <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
-                    <h3 style="margin:0">Telemetry Status</h3>
-                    <div>
-                        <button id="btnStatus" class="btn-status">Request Status</button>
-                    </div>
-                </div>
-                <div class="status-bar" id="statusBar">
-                    <p class="log-empty">No telemetry data received yet.</p>
-                </div>
-            </div>
-        </div>
-
         <!-- Comm Console Pop-down (hidden by default) -->
         <div id="consolePanel" class="settings-panel hidden">
             <div class="settings-content">
@@ -124,8 +109,8 @@
                     <h3>Parameters</h3>
                     <div class="input-group">
                         <label for="duration">Duration (s):</label>
-                        <input type="range" id="duration" value="2" min="1" max="10" step="1">
-                        <span id="durationDisplay">2s</span>
+                        <input type="range" id="duration" value="5" min="1" max="10" step="1">
+                        <span id="durationDisplay">5s</span>
                     </div>
                     <div class="input-group">
                         <label for="power">Power:</label>

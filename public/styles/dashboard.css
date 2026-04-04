@@ -139,7 +139,10 @@ input[type="range"] { width:100%; background: transparent; accent-color: var(--a
 /* History & status panel */
 .history-panel { padding: 24px; overflow-y:auto; background: var(--surface-bg); }
 .history-panel h2 { margin-bottom:12px; }
-.command-log { background: var(--card-bg); border:1px solid var(--card-border); border-radius:6px; padding:12px; max-height:440px; overflow-y:auto; font-family: 'Courier New', monospace; font-size:12px; }
+.command-log { background: var(--card-bg); border:1px solid var(--card-border); border-radius:6px; padding:12px; max-height:600px; overflow-y:auto; font-family: 'Courier New', monospace; font-size:12px; }
+
+/* Telemetry card grid inside the telemetry panel */
+.status-bar { display:flex; flex-wrap:wrap; gap:8px; max-height:440px; overflow-y:auto; padding:4px 0; }
 .log-empty { color: var(--text-muted); text-align:center; padding:20px; font-style:italic; }
 
 /* Buttons */
@@ -152,10 +155,11 @@ button { padding:10px 12px; border-radius:6px; border:none; cursor:pointer; }
 
 /* Small helpers */
 .log-entry { display:flex; gap:8px; padding:8px; border-bottom:1px solid var(--card-border); }
-.log-timestamp { color: var(--text-muted); font-weight:600; width:90px; }
-.log-command { color: var(--text-primary); }
+.log-timestamp { color: var(--text-muted); font-weight:600; width:90px; flex-shrink:0; }
+.log-command { color: var(--text-primary); flex:1; }
 .log-success { color: var(--success); }
 .log-error { color: var(--danger); }
+.log-telemetry { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; font-size:11px; color:var(--text-muted); }
 
 /* Range thumb styling */
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); border:2px solid #fff; }

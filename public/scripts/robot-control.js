@@ -35,10 +35,8 @@ class RobotController {
         this.processingMessage = document.getElementById('processingMessage');
 
         // Status / telemetry
-        this.btnStatus = document.getElementById('btnStatus');
         this.statusIndicator = document.getElementById('statusIndicator');
         this.statusText = document.getElementById('statusText');
-        this.statusBar = document.getElementById('statusBar');
 
         // Comm console
         this.commConsole = document.getElementById('commConsole');
@@ -75,14 +73,9 @@ class RobotController {
         // Console controls
         if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
 
-        // Telemetry toggle
-        if (this.btnTelemetry && this.telemetryPanel) {
-            this.btnTelemetry.addEventListener('click', () => {
-                this.telemetryPanel.classList.toggle('visible');
-                this.telemetryPanel.classList.toggle('hidden');
-                const expanded = this.telemetryPanel.classList.contains('visible');
-                this.btnTelemetry.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            });
+        // Telemetry button — request telemetry directly
+        if (this.btnTelemetry) {
+            this.btnTelemetry.addEventListener('click', () => this.requestStatus());
         }
 
         // Console toggle
@@ -101,7 +94,7 @@ class RobotController {
 
     /* --- Input handlers --- */
     handleDirection(direction) {
-        const duration = this.parseNumber(this.durationInput.value, 2);
+        const duration = this.parseNumber(this.durationInput.value, 5);
         const power = this.parseNumber(this.powerInput.value, 80);
         const cmd = {
             type: direction === 'left' || direction === 'right' ? 'TURN' : 'MOVE',
@@ -275,17 +268,16 @@ class RobotController {
 
     /* --- Telemetry & Status --- */
     async requestStatus() {
-        if (this.btnStatus) {
-            this.btnStatus.disabled = true;
-            this.btnStatus.classList.add('loading');
-            this.btnStatus.setAttribute('aria-busy', 'true');
+        if (this.btnTelemetry) {
+            this.btnTelemetry.disabled = true;
+            this.btnTelemetry.classList.add('loading');
+            this.btnTelemetry.setAttribute('aria-busy', 'true');
         }
         this.appendConsole('GET /robot/telemetry_request -> sending...');
         try {
             const response = await fetch('/robot/telemetry_request', { method: 'GET' });
             if (response.ok) {
                 const body = await response.json().catch(() => null);
-                this.updateStatusDisplay(body?.telemetry || {});
                 this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
                 window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: body, success: true });
             } else {
@@ -305,59 +297,12 @@ class RobotController {
             this.setConnectionStatus(false);
             window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', timestamp: new Date(), response: (error && (error.stack || error.message)) || String(error), success: false });
         } finally {
-            if (this.btnStatus) {
-                this.btnStatus.disabled = false;
-                this.btnStatus.classList.remove('loading');
-                this.btnStatus.removeAttribute('aria-busy');
+            if (this.btnTelemetry) {
+                this.btnTelemetry.disabled = false;
+                this.btnTelemetry.classList.remove('loading');
+                this.btnTelemetry.removeAttribute('aria-busy');
             }
         }
-    }
-
-    updateStatusDisplay(status) {
-        if (!status) return;
-        if (status.last_packet_counter !== undefined && this.lastPktCounter) this.lastPktCounter.textContent = status.last_packet_counter;
-        if (status.current_grade !== undefined && this.currentGrade) this.currentGrade.textContent = status.current_grade;
-        if (status.hit_count !== undefined && this.hitCount) this.hitCount.textContent = status.hit_count;
-        if (status.heading !== undefined && this.heading) this.heading.textContent = status.heading;
-        if (status.last_command !== undefined && this.lastCommandElem) this.lastCommandElem.textContent = status.last_command;
-        if (status.last_command_value !== undefined && this.lastCommandValue) this.lastCommandValue.textContent = status.last_command_value;
-        if (status.last_command_power !== undefined && this.lastCommandPower) this.lastCommandPower.textContent = status.last_command_power;
-        if (this.lastUpdate) this.lastUpdate.textContent = new Date().toLocaleTimeString();
-
-        if (this.statusBar) {
-            const set = (key, label, value, unit, state) => this.createOrUpdateCard(key, label, value, unit, state);
-            set('connection', 'Connection', this.statusText ? this.statusText.textContent : (status.connected ? 'Connected' : 'Disconnected'), '');
-            if (status.last_packet_counter !== undefined) set('pkt', 'Packet #', status.last_packet_counter, '');
-            if (status.current_grade !== undefined) set('grade', 'Grade', status.current_grade, '');
-            if (status.hit_count !== undefined) set('hits', 'Hits', status.hit_count, '');
-            if (status.heading !== undefined) set('heading', 'Heading', status.heading, '°');
-            if (status.last_command !== undefined) set('lastcmd', 'Last Cmd', status.last_command, '');
-            if (status.last_command_value !== undefined) set('lastval', 'Cmd Val', status.last_command_value, '');
-            if (status.last_command_power !== undefined) set('lastpow', 'Power', status.last_command_power, '%');
-        }
-    }
-
-    createOrUpdateCard(key, label, value, unit, state) {
-        if (!this.statusBar) return;
-        const placeholder = this.statusBar.querySelector('.log-empty');
-        if (placeholder) placeholder.remove();
-        const id = `status-card-${key}`;
-        let card = document.getElementById(id);
-        if (!card) {
-            card = document.createElement('div');
-            card.id = id;
-            card.className = 'status-card';
-            card.innerHTML = `<div class="card-label"></div><div class="card-value"></div>`;
-            this.statusBar.appendChild(card);
-        }
-        const labelEl = card.querySelector('.card-label');
-        const valueEl = card.querySelector('.card-value');
-        if (labelEl) labelEl.textContent = label;
-        if (valueEl) valueEl.textContent = (value === null || value === undefined) ? '--' : `${value}${unit || ''}`;
-        card.classList.remove('warning', 'alert', 'ok');
-        if (state === 'warning') card.classList.add('warning');
-        else if (state === 'alert') card.classList.add('alert');
-        else if (state === 'ok') card.classList.add('ok');
     }
 
     setConnectionStatus(connected) {

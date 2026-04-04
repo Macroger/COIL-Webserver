@@ -11,6 +11,7 @@
 #include <mutex>
 #include <csignal>
 #include <cstdlib>
+#include <atomic>
 #include "MySocket.h"
 #include "pktdef.h"
 
@@ -31,9 +32,10 @@ int main()
 	std::signal(SIGINT, restore_and_exit_handler);
 	std::signal(SIGTERM, restore_and_exit_handler);
     
-	// Shared socket manager and mutex for thread-safe use in route handlers
+	// Shared socket manager, mutex, and packet counter for thread-safe use in route handlers
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
 	std::mutex socketMutex;
+	int pktCounter = 0;
 
 	// Command and Control GUI for robot - serves the main page of the web interface
 	CROW_ROUTE(app, "/")
@@ -255,43 +257,300 @@ int main()
 		res.end();
 	});	
 
-	// PUT /telecommand - Execute movement or sleep command
+	// PUT /robot/telecommand - Build and send a real packet, return simulator response
+	// Expected JSON: { "command": "DRIVE"|"SLEEP"|"STATUS", "direction": "FORWARD"|"BACKWARD"|"LEFT"|"RIGHT", "duration": <int>, "power": <int> }
 	CROW_ROUTE(app, "/robot/telecommand").methods("PUT"_method)
-	([](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
 	{
 		auto body = crow::json::load(req.body);
-
-		// Determine which command is being sent
-		
 
 		if (!body)
 		{
 			res.code = 400;
 			res.set_header("Content-Type", "application/json");
 			res.write(R"({"status":"error","message":"Invalid JSON"})");
+			res.end();
+			return;
 		}
-		else
+
+		std::lock_guard<std::mutex> lock(socketMutex);
+
+		if (!socketMgr || !socketMgr->IsConnected())
 		{
-			std::string direction = body["direction"].s();
-			double distance = body["distance"].d();
-			double duration = body["duration"].d();
-			int power = static_cast<int>(body["power"].d());
-			
-			// Mock response - TODO: Replace with actual robot communication
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Not connected to robot"})");
+			res.end();
+			return;
+		}
+
+		try
+		{
+			std::string command = body["command"].s();
+
+			coil::protocol::PktDef pkt;
+			pkt.SetPktCount(++pktCounter);
+
+			if (command == "DRIVE")
+			{
+				std::string direction = body["direction"].s();
+				uint8_t duration     = static_cast<uint8_t>(body["duration"].d());
+				uint8_t power        = static_cast<uint8_t>(body["power"].d());
+
+				uint8_t dir = coil::protocol::constants::FORWARD;
+				if      (direction == "BACKWARD") dir = coil::protocol::constants::BACKWARD;
+				else if (direction == "LEFT")     dir = coil::protocol::constants::LEFT;
+				else if (direction == "RIGHT")    dir = coil::protocol::constants::RIGHT;
+
+				unsigned char driveData[3] = { dir, duration, power };
+				pkt.SetCmd(coil::protocol::CmdType::DRIVE);
+				pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+			}
+			else if (command == "SLEEP")
+			{
+				pkt.SetCmd(coil::protocol::CmdType::SLEEP);
+			}
+			else if (command == "STATUS")
+			{
+				pkt.SetCmd(coil::protocol::CmdType::RESPONSE);
+			}
+			else
+			{
+				res.code = 400;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Unknown command. Use DRIVE, SLEEP, or STATUS"})");
+				res.end();
+				return;
+			}
+
+			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
+
+			// Read simulator response
+			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+			int bytesRead = socketMgr->GetData(recvBuf);
+
 			auto response = crow::json::wvalue();
-			response["status"] = "success";
-			response["command"] = "MOVE";
-			response["direction"] = direction;
-			response["distance"] = distance;
-			response["duration"] = duration;
-			response["power"] = power;
-			response["timestamp"] = static_cast<long long>(std::time(nullptr));
-			
+			response["status"]       = "success";
+			response["command"]      = command;
+			response["packet_count"] = pktCounter;
+			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
+
+			if (bytesRead > 0)
+			{
+				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
+				bool ack = responsePkt.GetAck();
+				response["ack"]          = ack;
+				response["sim_response"] = ack ? "ACK" : "NACK";
+
+				// Capture any text message in the response body
+				char* bodyPtr = responsePkt.GetBodyData();
+				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
+				if (bodyPtr != nullptr && bodyLen > 0)
+				{
+					response["sim_message"] = std::string(bodyPtr, bodyLen);
+				}
+			}
+			else
+			{
+				response["ack"]          = false;
+				response["sim_response"] = "TIMEOUT";
+				response["sim_message"]  = "No response from simulator";
+			}
+
 			res.code = 200;
 			res.set_header("Content-Type", "application/json");
 			res.write(response.dump());
 		}
-		
+		catch (const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
+		}
+
+		res.end();
+	});
+
+	// Helper lambda: build and send a DRIVE packet, return simulator response as JSON wvalue
+	auto sendDrivePacket = [&socketMgr, &socketMutex, &pktCounter](
+		uint8_t dir, uint8_t duration, uint8_t power,
+		crow::response& res) -> bool
+	{
+		std::lock_guard<std::mutex> lock(socketMutex);
+
+		if (!socketMgr || !socketMgr->IsConnected())
+		{
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Not connected to robot"})");
+			res.end();
+			return false;
+		}
+
+		try
+		{
+			coil::protocol::PktDef pkt;
+			pkt.SetPktCount(++pktCounter);
+			pkt.SetCmd(coil::protocol::CmdType::DRIVE);
+			unsigned char driveData[3] = { dir, duration, power };
+			pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
+
+			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+			int bytesRead = socketMgr->GetData(recvBuf);
+
+			auto response = crow::json::wvalue();
+			response["status"]       = "success";
+			response["packet_count"] = pktCounter;
+			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
+
+			if (bytesRead > 0)
+			{
+				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
+				bool ack = responsePkt.GetAck();
+				response["ack"]          = ack;
+				response["sim_response"] = ack ? "ACK" : "NACK";
+
+				char* bodyPtr = responsePkt.GetBodyData();
+				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
+				if (bodyPtr != nullptr && bodyLen > 0)
+					response["sim_message"] = std::string(bodyPtr, bodyLen);
+			}
+			else
+			{
+				response["ack"]          = false;
+				response["sim_response"] = "TIMEOUT";
+				response["sim_message"]  = "No response from simulator";
+			}
+
+			res.code = 200;
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
+		}
+		catch (const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
+		}
+
+		res.end();
+		return true;
+	};
+
+	// POST /robot/move - Forward / backward drive command
+	// Expected JSON: { "direction": "forward"|"backward", "duration": <ms>, "power": <0-100> }
+	CROW_ROUTE(app, "/robot/move").methods("POST"_method)
+	([&sendDrivePacket](const crow::request& req, crow::response& res)
+	{
+		auto body = crow::json::load(req.body);
+		if (!body)
+		{
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Invalid JSON"})");
+			res.end();
+			return;
+		}
+
+		std::string direction = body["direction"].s();
+		uint8_t duration = static_cast<uint8_t>(body["duration"].d()); // UI sends seconds
+		uint8_t power    = static_cast<uint8_t>(body["power"].d());
+
+		uint8_t dir = coil::protocol::constants::FORWARD;
+		if (direction == "backward") dir = coil::protocol::constants::BACKWARD;
+
+		sendDrivePacket(dir, duration, power, res);
+	});
+
+	// POST /robot/turn - Left / right turn command
+	// Turn body wire format: { direction (uint8), duration (uint16 little-endian, seconds) }
+	// High byte must be 0x00; low byte holds the seconds value (0-255s fits fine).
+	// Simulator stores the duration value directly in the Heading telemetry field.
+	// Expected JSON: { "direction": "left"|"right", "duration": <seconds> }
+	CROW_ROUTE(app, "/robot/turn").methods("POST"_method)
+	([&socketMgr, &socketMutex, &pktCounter](const crow::request& req, crow::response& res)
+	{
+		auto body = crow::json::load(req.body);
+		if (!body)
+		{
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Invalid JSON"})");
+			res.end();
+			return;
+		}
+
+		std::lock_guard<std::mutex> lock(socketMutex);
+
+		if (!socketMgr || !socketMgr->IsConnected())
+		{
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Not connected to robot"})");
+			res.end();
+			return;
+		}
+
+		try
+		{
+			std::string direction = body["direction"].s();
+			// Protocol: TurnBody duration is seconds (2 bytes LE). High byte must be 0x00.
+			// Simulator echoes this value into the Heading telemetry field (in seconds).
+			uint8_t durationByte = static_cast<uint8_t>(body["duration"].d()); // UI sends seconds
+
+			uint8_t dir = coil::protocol::constants::LEFT;
+			if (direction == "right") dir = coil::protocol::constants::RIGHT;
+
+			// Turn body: { direction (1 byte), duration low-byte (1 byte), 0x00 (high byte must be zero) }
+			unsigned char turnData[3] = { dir, durationByte, 0x00 };
+
+			coil::protocol::PktDef pkt;
+			pkt.SetPktCount(++pktCounter);
+			pkt.SetCmd(coil::protocol::CmdType::DRIVE);
+			pkt.SetBodyData(reinterpret_cast<char*>(turnData), 3);
+			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
+
+			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+			int bytesRead = socketMgr->GetData(recvBuf);
+
+			auto response = crow::json::wvalue();
+			response["status"]        = "success";
+			response["direction"]     = direction;
+			response["duration_byte"] = durationByte;
+			response["packet_count"]  = pktCounter;
+			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
+
+			if (bytesRead > 0)
+			{
+				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
+				bool ack = responsePkt.GetAck();
+				response["ack"]          = ack;
+				response["sim_response"] = ack ? "ACK" : "NACK";
+
+				char* bodyPtr = responsePkt.GetBodyData();
+				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
+				if (bodyPtr != nullptr && bodyLen > 0)
+					response["sim_message"] = std::string(bodyPtr, bodyLen);
+			}
+			else
+			{
+				response["ack"]          = false;
+				response["sim_response"] = "TIMEOUT";
+				response["sim_message"]  = "No response from simulator";
+			}
+
+			res.code = 200;
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
+		}
+		catch (const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
+		}
+
 		res.end();
 	});
 

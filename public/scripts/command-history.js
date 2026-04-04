@@ -111,6 +111,19 @@ class CommandHistory {
             commandText = 'STOP';
         } else if (entry.type === 'STATUS_REQUEST') {
             commandText = 'STATUS REQUEST';
+            const t = entry.response?.telemetry;
+            if (t) {
+                const cmdMap = { 1: 'DRIVE FORWARD', 2: 'DRIVE BACKWARD', 3: 'TURN RIGHT', 4: 'TURN LEFT' };
+                const isTurn = t.last_command === 3 || t.last_command === 4;
+                commandText += `<div class="log-telemetry">
+                    <span>Pkt#${t.last_packet_counter}</span>
+                    <span>Grade:${t.current_grade}%</span>
+                    <span>Hits:${t.hit_count}</span>
+                    <span>${isTurn ? 'TurnDur' : 'Hdg'}:${t.heading}${isTurn ? 's' : '°'}</span>
+                    <span>Last Cmd:${cmdMap[t.last_command] ?? t.last_command}</span>
+                    ${!isTurn ? `<span>Duration:${t.last_command_value}s</span><span>Power:${t.last_command_power}%</span>` : ''}
+                </div>`;
+            }
         } else {
             commandText = entry.type;
         }

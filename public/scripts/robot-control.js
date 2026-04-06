@@ -1,17 +1,25 @@
 /**
  * Robot Control Module
- * Handles directional buttons, numeric inputs, and command execution
+ * Simplified: four direction buttons + duration + power slider
+ * Enforces power 80-100%, single-command execution with optional one-slot queue
  */
 
 class RobotController {
     constructor() {
         this.lastCommand = null;
         this.isExecuting = false;
-        this.commandQueue = [];
-        this.isPlayingQueue = false;
+        this.pendingCommand = null; // single-slot queued command
         this.initializeElements();
         this.attachEventListeners();
-        this.checkConnectionStatus();
+        this.updatePendingDisplay();
+        // Ensure slider readouts are correct on load
+        if (this.durationInput && this.durationDisplay) {
+            this.durationDisplay.textContent = this.durationInput.value + 's';
+        }
+        if (this.powerInput && this.powerDisplay) {
+            if (Number(this.powerInput.value) < 80) this.powerInput.value = 80;
+            this.powerDisplay.textContent = this.powerInput.value + '%';
+        }
     }
 
     initializeElements() {
@@ -20,92 +28,73 @@ class RobotController {
         this.btnBackward = document.getElementById('btnBackward');
         this.btnLeft = document.getElementById('btnLeft');
         this.btnRight = document.getElementById('btnRight');
-
+        this.arrowPad = document.querySelector('.arrow-pad');
         // Numeric inputs
-        this.distanceInput = document.getElementById('distance');
-        this.angleInput = document.getElementById('angle');
         this.durationInput = document.getElementById('duration');
         this.durationDisplay = document.getElementById('durationDisplay');
         this.powerInput = document.getElementById('power');
         this.powerDisplay = document.getElementById('powerDisplay');
 
-        // Action buttons
-        this.btnExecute = document.getElementById('btnExecute');
-        this.btnAddQueue = document.getElementById('btnAddQueue');
-        this.btnPlayQueue = document.getElementById('btnPlayQueue');
-        this.btnClearQueue = document.getElementById('btnClearQueue');
-        this.btnStop = document.getElementById('btnStop');
-        this.btnStatus = document.getElementById('btnStatus');
+        // Pending command display (single-slot)
+        this.commandQueueList = document.getElementById('commandQueueList');
 
-        // Status elements (telemetry)
+        // Processing message
+        this.processingMessage = document.getElementById('processingMessage');
+
+        // Status / telemetry
         this.statusIndicator = document.getElementById('statusIndicator');
         this.statusText = document.getElementById('statusText');
-        this.lastPktCounter = document.getElementById('lastPktCounter');
-        this.currentGrade = document.getElementById('currentGrade');
-        this.hitCount = document.getElementById('hitCount');
-        this.heading = document.getElementById('heading');
-        this.lastCommandElem = document.getElementById('lastCommand');
-        this.lastCommandValue = document.getElementById('lastCommandValue');
-        this.lastCommandPower = document.getElementById('lastCommandPower');
-        this.lastUpdate = document.getElementById('lastUpdate');
+        this.statusBar = document.getElementById('statusBar');
+        // Telemetry card elements
+        this.lastPktCounter = document.getElementById('telemetryLastPktCounter');
+        this.currentGrade = document.getElementById('telemetryCurrentGrade');
+        this.hitCount = document.getElementById('telemetryHitCount');
+        this.heading = document.getElementById('telemetryHeading');
+        this.lastCommandElem = document.getElementById('telemetryLastCmd');
+        this.lastCommandValue = document.getElementById('telemetryLastCmdValue');
+        this.lastCommandPower = document.getElementById('telemetryLastCmdPower');
 
-        // Comm console elements
+        // Comm console
         this.commConsole = document.getElementById('commConsole');
         this.btnClearConsole = document.getElementById('btnClearConsole');
         this.autoScroll = document.getElementById('autoScroll');
 
-        // Queue display
-        this.commandQueueList = document.getElementById('commandQueueList');
-        
-        // Telemetry/Status bar elements
+        // Console & telemetry toggles
         this.btnTelemetry = document.getElementById('btnTelemetry');
         this.telemetryPanel = document.getElementById('telemetryPanel');
-        this.statusBar = document.getElementById('statusBar');
-        // Comm Console panel toggle
         this.btnConsole = document.getElementById('btnConsole');
         this.consolePanel = document.getElementById('consolePanel');
+        this.btnStatus = document.getElementById('btnStatus');
     }
 
     attachEventListeners() {
-        // Directional button listeners
-        this.btnForward.addEventListener('click', () => this.executeMove('forward'));
-        this.btnBackward.addEventListener('click', () => this.executeMove('backward'));
-        this.btnLeft.addEventListener('click', () => this.executeTurn('left'));
-        this.btnRight.addEventListener('click', () => this.executeTurn('right'));
+        // Directional buttons
+        this.btnForward.addEventListener('click', () => this.handleDirection('forward'));
+        this.btnBackward.addEventListener('click', () => this.handleDirection('backward'));
+        this.btnLeft.addEventListener('click', () => this.handleDirection('left'));
+        this.btnRight.addEventListener('click', () => this.handleDirection('right'));
 
-        // Numeric execute
-        this.btnExecute.addEventListener('click', () => this.executeWithParameters());
-
-        // Stop button
-        this.btnStop.addEventListener('click', () => this.executeStop());
-
-        // Status button
-        this.btnStatus.addEventListener('click', () => this.requestStatus());
-
-        // Slider listeners for display updates
+        // Slider display updates
         this.durationInput.addEventListener('input', () => {
             this.durationDisplay.textContent = this.durationInput.value + 's';
         });
-
         this.powerInput.addEventListener('input', () => {
+            // enforce min bound (in case of programmatic changes)
+            if (Number(this.powerInput.value) < 80) this.powerInput.value = 80;
             this.powerDisplay.textContent = this.powerInput.value + '%';
         });
 
-        // Keyboard shortcuts
+        // Keyboard arrows
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
 
         // Console controls
         if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
-        if (this.autoScroll) this.autoScroll.addEventListener('change', () => {});
 
-        // Queue controls (if present)
-        if (this.btnAddQueue) this.btnAddQueue.addEventListener('click', () => this.addCurrentToQueue());
-        if (this.btnPlayQueue) this.btnPlayQueue.addEventListener('click', () => this.playQueue());
-        if (this.btnClearQueue) this.btnClearQueue.addEventListener('click', () => this.clearQueue());
-
-        // Telemetry toggle
-        if (this.btnTelemetry && this.telemetryPanel) {
-            this.btnTelemetry.addEventListener('click', () => {
+        // Telemetry button — request telemetry directly
+        if (this.btnTelemetry && this.telemetryPanel) 
+        {
+            this.btnTelemetry.addEventListener('click', () => 
+            {
                 this.telemetryPanel.classList.toggle('visible');
                 this.telemetryPanel.classList.toggle('hidden');
                 const expanded = this.telemetryPanel.classList.contains('visible');
@@ -122,274 +111,182 @@ class RobotController {
                 this.btnConsole.setAttribute('aria-expanded', expanded ? 'true' : 'false');
             });
         }
+
+        // Status button
+        if (this.btnStatus) this.btnStatus.addEventListener('click', () => this.requestStatus());
     }
 
-    /**
-     * Execute forward/backward movement
-     */
-    async executeMove(direction) {
-        const duration = this.parseNumber(this.durationInput.value, 2);
-        const power = this.parseNumber(this.powerInput.value, 50);
-        const command = {
-            type: 'MOVE',
-            direction: direction,
-            duration: duration,
-            power: power,
-            timestamp: new Date()
-        };
-
-        await this.sendCommand(command);
-    }
-
-    /**
-     * Execute left/right turn
-     */
-    async executeTurn(direction) {
-        const angle = this.parseNumber(this.angleInput.value, 45);
-        const duration = this.parseNumber(this.durationInput.value, 2);
-        const power = this.parseNumber(this.powerInput.value, 50);
-        const command = {
-            type: 'TURN',
-            direction: direction,
-            angle: angle,
-            duration: duration,
-            power: power,
-            timestamp: new Date()
-        };
-
-        await this.sendCommand(command);
-    }
-
-    /**
-     * Execute command with parameters from input fields
-     */
-    async executeWithParameters() {
-        const distance = this.parseNumber(this.distanceInput.value, 1);
-        const angle = this.parseNumber(this.angleInput.value, 45);
-        const duration = this.parseNumber(this.durationInput.value, 2);
-        const power = this.parseNumber(this.powerInput.value, 50);
-
-        const command = {
-            type: 'MOVE',
-            direction: 'forward',
-            distance: distance,
-            duration: duration,
-            power: power,
-            angle: angle,
-            timestamp: new Date()
-        };
-
-        await this.sendCommand(command);
-    }
-
-    /**
-     * Execute stop command
-     */
-    async executeStop() {
-        const command = {
-            type: 'STOP',
-            timestamp: new Date()
-        };
-
-        await this.sendCommand(command);
-    }
-
-    /* Queue helpers */
-    addCurrentToQueue() {
+    /* --- Input handlers --- */
+    handleDirection(direction) {
+        const duration = this.parseNumber(this.durationInput.value, 5);
+        const power = this.parseNumber(this.powerInput.value, 80);
         const cmd = {
-            type: 'MOVE',
-            direction: 'forward',
-            distance: this.parseNumber(this.distanceInput.value, 1),
-            duration: this.parseNumber(this.durationInput.value, 2),
-            power: this.parseNumber(this.powerInput.value, 50),
-            timestamp: new Date()
+            type: direction === 'left' || direction === 'right' ? 'TURN' : 'MOVE',
+            direction: direction,
+            duration: duration,
+            power: Math.max(80, Math.min(100, power)),
+            timestamp: new Date(),
         };
-        this.commandQueue.push(cmd);
-        this.updateQueueDisplay();
-        this.appendConsole(`Queued: ${JSON.stringify(cmd)}`);
+        this.sendOrQueue(cmd);
     }
 
-    async playQueue() {
-        if (this.isPlayingQueue) return;
-        this.isPlayingQueue = true;
-        this.appendConsole(`Play queue (${this.commandQueue.length} commands)`);
-        while (this.commandQueue.length > 0) {
-            const cmd = this.commandQueue.shift();
-            this.updateQueueDisplay();
-            await this.sendCommand(cmd);
-            // small delay between commands
-            await new Promise(r => setTimeout(r, 50));
+    /* Single-slot queue logic */
+    sendOrQueue(cmd) {
+        if (!this.isExecuting) {
+            this._executeAndBlock(cmd);
+        } else {
+            if (!this.pendingCommand) {
+                this.pendingCommand = cmd;
+                this.appendConsole(`Queued one command: ${cmd.type} ${cmd.direction || ''}`);
+                this.updatePendingDisplay();
+            } else {
+                this.appendConsole('Already have one queued command; ignoring additional presses.');
+            }
         }
-        this.isPlayingQueue = false;
-        this.appendConsole('Queue finished');
     }
 
-    clearQueue() {
-        this.commandQueue = [];
-        this.updateQueueDisplay();
-        this.appendConsole('Queue cleared');
+    async _executeAndBlock(cmd) {
+        this.isExecuting = true;
+        this.pendingCommand = this.pendingCommand || null; // keep existing pending slot
+        this.updatePendingDisplay();
+        this.disableControlsForCommand(cmd);
+        this.appendConsole(`Sending command: ${JSON.stringify(cmd)}`);
+
+        // Determine endpoint
+        const endpoint = '/robot/telecommand';
+
+        // Map frontend cmd shape to the server's expected field names:
+        // - server expects "command": "DRIVE", "direction": uppercase, "duration", "power"
+        const payload = {
+            command: 'DRIVE',
+            direction: (cmd.direction || 'forward').toUpperCase(),
+            duration: cmd.duration,
+            power: cmd.power
+        };
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            let responseData = null;
+            let responseText = null;
+            try {
+                const ct = response.headers.get('content-type') || '';
+                if (ct.includes('application/json')) {
+                    responseData = await response.json();
+                } else {
+                    responseText = await response.text();
+                }
+            } catch (e) {
+                responseText = `(<failed to read body> ${e && e.message ? e.message : String(e)})`;
+            }
+
+            if (response.ok) {
+                const simResponse = responseData?.sim_response || 'UNKNOWN';
+                const pktNum = responseData?.packet_count ?? '?';
+                this.appendConsole(`PUT ${endpoint} -> ${simResponse} (pkt #${pktNum})`);
+            } else {
+                this.appendConsole(`PUT ${endpoint} -> ERR ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`);
+            }
+
+            const ack = response.ok && (responseData?.ack === true);
+            window.commandHistory?.addEntry({
+                type: cmd.type,
+                command: cmd,
+                success: ack,
+                timestamp: new Date()
+            });
+
+            this.setConnectionStatus(response.ok);
+        } catch (error) {
+            this.appendConsole(error);
+            window.commandHistory?.addEntry({ type: cmd.type, command: cmd, response: (error && (error.stack || error.message)) || String(error), success: false, timestamp: new Date() });
+            this.setConnectionStatus(false);
+        }
+
+        // Keep UI disabled for duration + 250ms as requested
+        const waitMs = Math.round((cmd.duration || 0) * 1000) + 250;
+        this.appendConsole(`Waiting ${waitMs}ms for command completion (UI locked)`);
+
+        // Show countdown in processing message
+        if (this.processingMessage) {
+            let remaining = waitMs;
+            this.processingMessage.textContent = `Please wait, processing command (${cmd.type})... (${(remaining/1000).toFixed(1)}s)`;
+            let interval = setInterval(() => {
+                remaining -= 100;
+                if (remaining > 0) {
+                    this.processingMessage.textContent = `Please wait, processing command (${cmd.type})... (${(remaining/1000).toFixed(1)}s)`;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
+        await new Promise(r => setTimeout(r, waitMs));
+
+        // After wait, check pending slot
+        this.isExecuting = false;
+        if (this.pendingCommand) {
+            const next = this.pendingCommand;
+            this.pendingCommand = null;
+            this.updatePendingDisplay();
+            // small gap before executing next queued command
+            await new Promise(r => setTimeout(r, 50));
+            return this._executeAndBlock(next);
+        }
+
+        this.enableControls();
     }
 
-    updateQueueDisplay() {
+    disableControlsForCommand(cmd) {
+        // visually mark buttons and disable them
+        [this.btnForward, this.btnBackward, this.btnLeft, this.btnRight].forEach(b => {
+            b.disabled = true;
+            b.classList.add('processing');
+        });
+        if (this.arrowPad) this.arrowPad.classList.add('processing');
+        if (this.processingMessage) {
+            this.processingMessage.textContent = `Please wait, processing command (${cmd.type})...`;
+            this.processingMessage.classList.remove('hidden');
+            this.processingMessage.classList.add('visible');
+            this.processingMessage.setAttribute('aria-busy', 'true');
+        }
+    }
+
+    enableControls() {
+        [this.btnForward, this.btnBackward, this.btnLeft, this.btnRight].forEach(b => {
+            b.disabled = false;
+            b.classList.remove('processing');
+        });
+        if (this.arrowPad) this.arrowPad.classList.remove('processing');
+        if (this.processingMessage) {
+            this.processingMessage.classList.remove('visible');
+            this.processingMessage.classList.add('hidden');
+            this.processingMessage.removeAttribute('aria-busy');
+        }
+    }
+
+    updatePendingDisplay() {
         if (!this.commandQueueList) return;
         this.commandQueueList.innerHTML = '';
-        if (this.commandQueue.length === 0) {
+        if (!this.pendingCommand) {
             const p = document.createElement('p');
             p.className = 'log-empty';
-            p.textContent = 'Queue is empty';
+            p.textContent = 'No pending command';
             this.commandQueueList.appendChild(p);
             return;
         }
-        this.commandQueue.forEach((c, idx) => {
-            const div = document.createElement('div');
-            div.className = 'queue-item';
-            div.textContent = `${idx+1}. ${c.type} ${c.direction || ''} dur:${c.duration} pow:${c.power}`;
-            this.commandQueueList.appendChild(div);
-        });
+        const c = this.pendingCommand;
+        const div = document.createElement('div');
+        div.className = 'queue-item';
+        div.textContent = `${c.type} ${c.direction || ''} dur:${c.duration} pow:${c.power}`;
+        this.commandQueueList.appendChild(div);
     }
 
     /**
-     * Request robot status update
-     */
-    async requestStatus() {
-        // indicate request started (visual spinner + disabled)
-        if (this.btnStatus) {
-            this.btnStatus.disabled = true;
-            this.btnStatus.classList.add('loading');
-            this.btnStatus.setAttribute('aria-busy', 'true');
-        }
-        this.appendConsole('GET /robot/telemetry_request -> sending...');
-        try {
-            const response = await fetch('/robot/telemetry_request', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const body = await response.json();
-                const telemetry = body.telemetry || {};
-                this.updateStatusDisplay(telemetry);
-                this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
-
-                // Log in command history
-                window.commandHistory?.addEntry({
-                    type: 'STATUS_REQUEST',
-                    timestamp: new Date(),
-                    response: body,
-                    success: true
-                });
-            } else {
-                console.error('Status request failed:', response.status);
-                window.commandHistory?.addEntry({
-                    type: 'STATUS_REQUEST',
-                    timestamp: new Date(),
-                    response: 'Failed',
-                    success: false
-                });
-            }
-        } catch (error) {
-            console.error('Status request error:', error);
-            this.appendConsole(`ERROR GET /robot/telemetry_request -> ${error.message}`);
-            this.setConnectionStatus(false);
-            window.commandHistory?.addEntry({
-                type: 'STATUS_REQUEST',
-                timestamp: new Date(),
-                response: error.message,
-                success: false
-            });
-        } finally {
-            if (this.btnStatus) {
-                this.btnStatus.disabled = false;
-                this.btnStatus.classList.remove('loading');
-                this.btnStatus.removeAttribute('aria-busy');
-            }
-        }
-    }
-
-    /**
-     * Send command to robot backend
-     */
-    async sendCommand(command) {
-        if (this.isExecuting) {
-            console.log('Command already executing');
-            return;
-        }
-
-        this.isExecuting = true;
-        this.btnExecute.disabled = true;
-        this.btnForward.disabled = true;
-        this.btnBackward.disabled = true;
-        this.btnLeft.disabled = true;
-        this.btnRight.disabled = true;
-
-        try {
-            const endpoint = command.type === 'MOVE' ? '/robot/move' : 
-                           command.type === 'TURN' ? '/robot/turn' :
-                           command.type === 'STOP' ? '/robot/stop' : '/robot/command';
-
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(command)
-            });
-
-            const responseData = await response.json();
-            this.appendConsole(`POST ${endpoint} -> request: ${JSON.stringify(command)} response: ${JSON.stringify(responseData)}`);
-
-            // If the backend echoes built packet bytes as an array under `raw_packet`, show hex dump
-            if (responseData && responseData.raw_packet) {
-                this.showRawPacket(responseData.raw_packet);
-            }
-            if (response.ok) {
-                // Log successful command
-                window.commandHistory?.addEntry({
-                    type: command.type,
-                    command: command,
-                    response: responseData,
-                    success: true,
-                    timestamp: new Date()
-                });
-                this.setConnectionStatus(true);
-            } else {
-                // Log failed command
-                window.commandHistory?.addEntry({
-                    type: command.type,
-                    command: command,
-                    response: responseData,
-                    success: false,
-                    timestamp: new Date()
-                });
-                this.setConnectionStatus(false);
-            }
-
-            this.lastCommand = command;
-        } catch (error) {
-            console.error('Command execution error:', error);
-            this.appendConsole(`ERROR sending command ${JSON.stringify(command)} -> ${error.message}`);
-            window.commandHistory?.addEntry({
-                type: command.type,
-                command: command,
-                response: error.message,
-                success: false,
-                timestamp: new Date()
-            });
-            this.setConnectionStatus(false);
-        } finally {
-            this.isExecuting = false;
-            this.btnExecute.disabled = false;
-            this.btnForward.disabled = false;
-            this.btnBackward.disabled = false;
-            this.btnLeft.disabled = false;
-            this.btnRight.disabled = false;
-        }
-    }
-
-    /**
-     * Handle keyboard shortcuts
+     * Keyboard handler for arrow keys
      */
     handleKeyboard(event) {
         if (event.target === document.body) {
@@ -405,20 +302,57 @@ class RobotController {
             } else if (event.key === 'ArrowRight') {
                 event.preventDefault();
                 this.btnRight.click();
-            } else if (event.key === ' ') {
-                event.preventDefault();
-                this.btnStop.click();
             }
         }
     }
 
-    /**
-     * Update status display with telemetry data
-     */
+    /* --- Telemetry & Status --- */
+    async requestStatus() {
+        if (this.btnStatus) {
+            this.btnStatus.disabled = true;
+            this.btnStatus.classList.add('loading');
+            this.btnStatus.setAttribute('aria-busy', 'true');
+        }
+        this.appendConsole('GET /robot/telemetry_request -> sending...');
+        try {
+            const response = await fetch('/robot/telemetry_request', { method: 'GET' });
+            if (response.ok) 
+            {
+                const body = await response.json().catch(() => null);
+                this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
+                this.updateStatusDisplay(body?.telemetry);
+                this.setConnectionStatus(true);
+                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: true });
+            } 
+            else 
+            {
+                let respBody = null;
+                try {
+                    const ct = response.headers.get('content-type') || '';
+                    if (ct.includes('application/json')) respBody = await response.json();
+                    else respBody = await response.text();
+                } catch (e) {
+                    respBody = `(<failed to read body> ${e && e.message ? e.message : String(e)})`;
+                }
+                this.appendConsole(`Status request failed: ${typeof respBody === 'string' ? respBody : JSON.stringify(respBody)}`);
+                this.setConnectionStatus(false);
+                window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
+            }
+        } catch (error) {
+            this.appendConsole(error);
+            this.setConnectionStatus(false);
+            window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
+        } finally {
+            if (this.btnStatus) {
+                this.btnStatus.disabled = false;
+                this.btnStatus.classList.remove('loading');
+                this.btnStatus.removeAttribute('aria-busy');
+            }
+        }
+    }
+
     updateStatusDisplay(status) {
         if (!status) return;
-
-        // keep legacy fields updated for compatibility (guard DOM elements)
         if (status.last_packet_counter !== undefined && this.lastPktCounter) this.lastPktCounter.textContent = status.last_packet_counter;
         if (status.current_grade !== undefined && this.currentGrade) this.currentGrade.textContent = status.current_grade;
         if (status.hit_count !== undefined && this.hitCount) this.hitCount.textContent = status.hit_count;
@@ -428,26 +362,21 @@ class RobotController {
         if (status.last_command_power !== undefined && this.lastCommandPower) this.lastCommandPower.textContent = status.last_command_power;
         if (this.lastUpdate) this.lastUpdate.textContent = new Date().toLocaleTimeString();
 
-        // render cards in telemetry status bar
-        if (this.statusBar) {
-            // helper to add/update card
-            const set = (key, label, value, unit, state) => this.createOrUpdateCard(key, label, value, unit, state);
-
-            set('connection', 'Connection', this.statusText ? this.statusText.textContent : (status.connected ? 'Connected' : 'Disconnected'), '');
-            if (status.last_packet_counter !== undefined) set('pkt', 'Packet #', status.last_packet_counter, '');
-            if (status.current_grade !== undefined) set('grade', 'Grade', status.current_grade, '');
-            if (status.hit_count !== undefined) set('hits', 'Hits', status.hit_count, '');
-            if (status.heading !== undefined) set('heading', 'Heading', status.heading, '°');
-            if (status.last_command !== undefined) set('lastcmd', 'Last Cmd', status.last_command, '');
-            if (status.last_command_value !== undefined) set('lastval', 'Cmd Val', status.last_command_value, '');
-            if (status.last_command_power !== undefined) set('lastpow', 'Power', status.last_command_power, '%');
-        }
+        // if (this.statusBar) {
+        //     const set = (key, label, value, unit, state) => this.createOrUpdateCard(key, label, value, unit, state);
+        //     set('connection', 'Connection', this.statusText ? this.statusText.textContent : (status.connected ? 'Connected' : 'Disconnected'), '');
+        //     if (status.last_packet_counter !== undefined) set('pkt', 'Packet #', status.last_packet_counter, '');
+        //     if (status.current_grade !== undefined) set('grade', 'Grade', status.current_grade, '');
+        //     if (status.hit_count !== undefined) set('hits', 'Hits', status.hit_count, '');
+        //     if (status.heading !== undefined) set('heading', 'Heading', status.heading, '°');
+        //     if (status.last_command !== undefined) set('lastcmd', 'Last Cmd', status.last_command, '');
+        //     if (status.last_command_value !== undefined) set('lastval', 'Cmd Val', status.last_command_value, '');
+        //     if (status.last_command_power !== undefined) set('lastpow', 'Power', status.last_command_power, '%');
+        // }
     }
 
-    /** Create or update a status card in the telemetry bar */
     createOrUpdateCard(key, label, value, unit, state) {
         if (!this.statusBar) return;
-        // remove placeholder message if present (first real card)
         const placeholder = this.statusBar.querySelector('.log-empty');
         if (placeholder) placeholder.remove();
         const id = `status-card-${key}`;
@@ -463,91 +392,84 @@ class RobotController {
         const valueEl = card.querySelector('.card-value');
         if (labelEl) labelEl.textContent = label;
         if (valueEl) valueEl.textContent = (value === null || value === undefined) ? '--' : `${value}${unit || ''}`;
-
-        // state classes
         card.classList.remove('warning', 'alert', 'ok');
         if (state === 'warning') card.classList.add('warning');
         else if (state === 'alert') card.classList.add('alert');
         else if (state === 'ok') card.classList.add('ok');
     }
 
-    /**
-     * Update connection status indicator
-     */
     setConnectionStatus(connected) {
-        if (connected) {
-            this.statusIndicator.classList.remove('disconnected');
-            this.statusIndicator.classList.add('connected');
-            this.statusText.textContent = 'Connected';
-        } else {
-            this.statusIndicator.classList.remove('connected');
-            this.statusIndicator.classList.add('disconnected');
-            this.statusText.textContent = 'Disconnected';
+        if (this.statusIndicator && this.statusText) {
+            if (connected) {
+                this.statusIndicator.classList.remove('disconnected');
+                this.statusIndicator.classList.add('connected');
+                this.statusText.textContent = 'Connected';
+            } else {
+                this.statusIndicator.classList.remove('connected');
+                this.statusIndicator.classList.add('disconnected');
+                this.statusText.textContent = 'Disconnected';
+            }
         }
+        // Mirror into Connection status card
+        const connCard = document.getElementById('statusCardConnection');
+        if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = connected ? 'Connected' : 'Disconnected'; }
     }
 
-    /**
-     * Append a line to the communication console.
-     */
     appendConsole(msg) {
         if (!this.commConsole) return;
-        const line = document.createElement('div');
-        line.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
-        this.commConsole.appendChild(line);
+        const pre = document.createElement('pre');
+        pre.className = 'console-line';
+        let text;
+        if (msg instanceof Error) {
+            text = msg.stack || msg.message || String(msg);
+        } else if (typeof msg === 'object') {
+            try {
+                text = JSON.stringify(msg, Object.getOwnPropertyNames(msg), 2);
+            } catch (e) {
+                try {
+                    const keys = Object.getOwnPropertyNames(msg);
+                    const simple = {};
+                    keys.forEach(k => { try { simple[k] = msg[k]; } catch (_) { simple[k] = '<unreadable>'; } });
+                    text = JSON.stringify(simple, null, 2);
+                } catch (e2) {
+                    text = String(msg);
+                }
+            }
+        } else {
+            text = String(msg);
+        }
+        pre.textContent = text;
+        this.commConsole.appendChild(pre);
         if (this.autoScroll && this.autoScroll.checked) {
             this.commConsole.scrollTop = this.commConsole.scrollHeight;
         }
     }
 
-    /**
-     * Clear the console contents.
-     */
     clearConsole() {
         if (!this.commConsole) return;
         this.commConsole.innerHTML = '';
     }
 
-    /**
-     * Show raw packet data (Uint8Array or array of numbers) in hex format.
-     */
     showRawPacket(bytes) {
         if (!bytes) return;
         let arr;
         if (bytes instanceof Uint8Array) arr = Array.from(bytes);
         else if (Array.isArray(bytes)) arr = bytes;
         else return this.appendConsole(String(bytes));
-
         const hex = arr.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join(' ');
         this.appendConsole(`RAW: ${hex}`);
     }
 
-    /**
-     * Parse numbers safely: preserve explicit 0, fall back for empty/invalid input
-     */
     parseNumber(value, fallback) {
         if (value === null || value === undefined) return fallback;
-        // treat empty string as invalid
         if (typeof value === 'string' && value.trim() === '') return fallback;
         const n = Number(value);
         return Number.isFinite(n) ? n : fallback;
     }
 
-    /**
-     * Check initial connection status
-     */
-    async checkConnectionStatus() {
-        try {
-            const response = await fetch('/robot/status', {
-                method: 'GET'
-            });
-            this.setConnectionStatus(response.ok);
-        } catch (error) {
-            this.setConnectionStatus(false);
-        }
-    }
 }
 
-// Initialize on page load
+
 window.addEventListener('load', () => {
     window.robotController = new RobotController();
 });

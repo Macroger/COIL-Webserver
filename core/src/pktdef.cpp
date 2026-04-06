@@ -14,7 +14,8 @@ namespace coil::protocol
 	/// Constructor for PktDef class that initializes the packet header, body, CRC, and raw buffer to default values.
 	/// </summary>
 	PktDef::PktDef()
-		: pktHeader{}, pktBody(nullptr), pktCRC(0), rawBuffer(nullptr) {
+		: pktHeader{}, pktBody(nullptr), pktCRC(0), rawBuffer(nullptr),
+		  endianness(coil::protocol::Endianness::LittleEndian) {
 		pktHeader.packetLength = MIN_PKT_SIZE;
 	}
 
@@ -63,9 +64,6 @@ namespace coil::protocol
 		}
 
 		// CRC passed - now deserialize the header
-		// Diagnostic: dump the received raw packet bytes for debugging
-		DumpHex("Received packet", rawData, bufferSize);
-		
 		// store chosen wire order
 		this->endianness = endianness;
 
@@ -113,11 +111,6 @@ namespace coil::protocol
 
 			// Copy the data into the packet body
 			std::memcpy(pktBody, pktBodyPtr, static_cast<size_t>(packetBodyLength));
-
-			// Pretty print the body in human readable strings for debugging
-			std::string bodyStr(pktBody, packetBodyLength);
-			std::printf("Packet body (%d bytes): %s\n", packetBodyLength, bodyStr.c_str());
-			
 		}
 		else
 		{
@@ -404,9 +397,6 @@ namespace coil::protocol
 
 		//3. Place CRC at the last byte
 		*writePtr = pktCRC;
-
-		// Diagnostic: dump the generated raw packet bytes for debugging
-		DumpHex("Sending packet", rawBuffer, actualPacketLength);
 
 		return rawBuffer;  // Return const pointer to internal buffer
 	}

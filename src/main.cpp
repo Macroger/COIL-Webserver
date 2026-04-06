@@ -11,8 +11,12 @@
 #include <mutex>
 #include <csignal>
 #include <cstdlib>
+#include <atomic>
 #include "MySocket.h"
 #include "pktdef.h"
+// httplib must come after MySocket.h — httplib defines INVALID_SOCKET as a macro
+// on non-Windows platforms, which conflicts with MySocket's constexpr of the same name.
+#include <httplib.h>
 
 using namespace std;
 
@@ -20,7 +24,7 @@ using namespace std;
 static void restore_and_exit_handler(int sig)
 {
 	::system("stty sane > /dev/null 2>&1");
-	std::_Exit(128 + sig);
+	std::exit(128 + sig);
 }
 
 int main()
@@ -31,12 +35,18 @@ int main()
 	std::signal(SIGINT, restore_and_exit_handler);
 	std::signal(SIGTERM, restore_and_exit_handler);
     
-	// Shared socket manager and mutex for thread-safe use in route handlers
+	// Shared socket manager, mutex, and packet counter for thread-safe use in route handlers
 	std::shared_ptr<coil::protocol::MySocket> socketMgr;
 	std::mutex socketMutex;
+	int pktCounter = 0;
 
-	// Command and Control GUI for robot - serves the main page of the web interface, which is a simple HTML page with some
-	// JavaScript to handle user interactions and display telemetry data.
+	// Relay mode state — when active, commands are forwarded via HTTP to a downstream server (PC3)
+	// instead of being sent as raw robot protocol packets directly to the robot.
+	bool relayMode = false;
+	std::string relayHost;
+	int relayPort = 30333;
+
+	// Command and Control GUI for robot - serves the main page of the web interface
 	CROW_ROUTE(app, "/")
 	([](const crow::request& req, crow::response& res)
 	{
@@ -256,113 +266,337 @@ int main()
 		res.end();
 	});	
 
-	// PUT /telecommand - Execute movement or sleep command
+	// PUT /robot/telecommand - Build and send a real packet, return simulator response
+	// Expected JSON: { "command": "DRIVE"|"SLEEP"|"STATUS", "direction": "FORWARD"|"BACKWARD"|"LEFT"|"RIGHT", "duration": <int>, "power": <int> }
 	CROW_ROUTE(app, "/robot/telecommand").methods("PUT"_method)
-	([](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res)
 	{
-		auto body = crow::json::load(req.body);
+		// Relay mode: forward the request as-is to the downstream server (PC3)
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Put("/robot/telecommand", req.body, "application/json");
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 503;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Relay server unreachable"})");
+			}
+			res.end();
+			return;
+		}
 
-		// Determine which command is being sent
-		
+		auto body = crow::json::load(req.body);
 
 		if (!body)
 		{
 			res.code = 400;
 			res.set_header("Content-Type", "application/json");
 			res.write(R"({"status":"error","message":"Invalid JSON"})");
+			res.end();
+			return;
 		}
-		else
+
+		std::lock_guard<std::mutex> lock(socketMutex);
+
+		if (!socketMgr || !socketMgr->IsConnected())
 		{
-			std::string direction = body["direction"].s();
-			double distance = body["distance"].d();
-			double duration = body["duration"].d();
-			int power = static_cast<int>(body["power"].d());
-			
-			// Mock response - TODO: Replace with actual robot communication
+			res.code = 400;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Not connected to robot"})");
+			res.end();
+			return;
+		}
+
+		try
+		{
+			std::string command = body["command"].s();
+
+			coil::protocol::PktDef pkt;
+			pkt.SetPktCount(++pktCounter);
+
+			if (command == "DRIVE")
+			{
+				std::string direction = body["direction"].s();
+				uint8_t duration     = static_cast<uint8_t>(body["duration"].d());
+				uint8_t power        = static_cast<uint8_t>(body["power"].d());
+
+				uint8_t dir = coil::protocol::constants::FORWARD;
+				if      (direction == "BACKWARD") dir = coil::protocol::constants::BACKWARD;
+				else if (direction == "LEFT")     dir = coil::protocol::constants::LEFT;
+				else if (direction == "RIGHT")    dir = coil::protocol::constants::RIGHT;
+
+				pkt.SetCmd(coil::protocol::CmdType::DRIVE);
+
+				if (dir == coil::protocol::constants::LEFT || dir == coil::protocol::constants::RIGHT)
+				{
+					// TurnBody: Direction (1-byte) + Duration (2-bytes) — no Power field
+					unsigned char turnData[3] = { dir,
+					                              static_cast<uint8_t>(duration & 0xFF),
+					                              static_cast<uint8_t>((duration >> 8) & 0xFF) };
+					pkt.SetBodyData(reinterpret_cast<char*>(turnData), 3);
+				}
+				else
+				{
+					// DriveBody: Direction (1-byte) + Duration (1-byte) + Power (1-byte)
+					unsigned char driveData[3] = { dir, duration, power };
+					pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+				}
+			}
+			else if (command == "SLEEP")
+			{
+				pkt.SetCmd(coil::protocol::CmdType::SLEEP);
+			}
+			else if (command == "STATUS")
+			{
+				pkt.SetCmd(coil::protocol::CmdType::RESPONSE);
+			}
+			else
+			{
+				res.code = 400;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Unknown command. Use DRIVE, SLEEP, or STATUS"})");
+				res.end();
+				return;
+			}
+
+			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
+
+			// Read simulator response
+			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+			int bytesRead = socketMgr->GetData(recvBuf);
+
 			auto response = crow::json::wvalue();
-			response["status"] = "success";
-			response["command"] = "MOVE";
-			response["direction"] = direction;
-			response["distance"] = distance;
-			response["duration"] = duration;
-			response["power"] = power;
-			response["timestamp"] = static_cast<long long>(std::time(nullptr));
-			
+			response["status"]       = "success";
+			response["command"]      = command;
+			response["packet_count"] = pktCounter;
+			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
+
+			if (bytesRead > 0)
+			{
+				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
+				bool ack = responsePkt.GetAck();
+				response["ack"]          = ack;
+				response["sim_response"] = ack ? "ACK" : "NACK";
+
+				// Capture any text message in the response body
+				char* bodyPtr = responsePkt.GetBodyData();
+				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
+				if (bodyPtr != nullptr && bodyLen > 0)
+				{
+					response["sim_message"] = std::string(bodyPtr, bodyLen);
+				}
+			}
+			else
+			{
+				response["ack"]          = false;
+				response["sim_response"] = "TIMEOUT";
+				response["sim_message"]  = "No response from simulator";
+			}
+
 			res.code = 200;
 			res.set_header("Content-Type", "application/json");
 			res.write(response.dump());
 		}
-		
+		catch (const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
+		}
+
 		res.end();
 	});
 
-	// POST /robot/connect - Configure and connect to robot
-	CROW_ROUTE(app, "/robot/connect").methods("POST"_method)
-	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
+	// Helper lambda: build and send a DRIVE packet, return simulator response as JSON wvalue
+	auto sendDrivePacket = [&socketMgr, &socketMutex, &pktCounter](
+		uint8_t dir, uint8_t duration, uint8_t power,
+		crow::response& res) -> bool
 	{
-		auto body = crow::json::load(req.body);
-		
-		if (!body)
+		std::lock_guard<std::mutex> lock(socketMutex);
+
+		if (!socketMgr || !socketMgr->IsConnected())
 		{
 			res.code = 400;
 			res.set_header("Content-Type", "application/json");
-			res.write(R"({"status":"error","message":"Invalid JSON"})");
+			res.write(R"({"status":"error","message":"Not connected to robot"})");
+			res.end();
+			return false;
 		}
-		else
+
+		try
 		{
-			std::string ip 		= body["ip"].s();
-			int port 			= static_cast<int>(body["port"].d());
-			int mode 			= static_cast<int>(body["mode"].d());
+			coil::protocol::PktDef pkt;
+			pkt.SetPktCount(++pktCounter);
+			pkt.SetCmd(coil::protocol::CmdType::DRIVE);
+			unsigned char driveData[3] = { dir, duration, power };
+			pkt.SetBodyData(reinterpret_cast<char*>(driveData), 3);
+			socketMgr->SendData(pkt.GenPacket(), pkt.GetLength());
 
-			std::lock_guard<std::mutex> lock(socketMutex);
-			
-			try
-			{			
-				auto connType = static_cast<coil::protocol::ConnectionType>(mode);
+			char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+			int bytesRead = socketMgr->GetData(recvBuf);
 
-				// then construct the socket using connType:
-				socketMgr = std::make_shared<coil::protocol::MySocket>(
-					coil::protocol::SocketType::CLIENT,
-					connType,
-					port,
-					255,
-					ip
-				);
+			auto response = crow::json::wvalue();
+			response["status"]       = "success";
+			response["packet_count"] = pktCounter;
+			response["timestamp"]    = static_cast<long long>(std::time(nullptr));
 
-				// if TCP, call ConnectTCP()
-				if (connType == coil::protocol::ConnectionType::TCP) {
-					socketMgr->ConnectTCP();
-				}
-				
-				auto response = crow::json::wvalue();
-				response["status"] = "success";
-				response["message"] = "Connected to robot";
-				response["ip"] = ip;
-				response["port"] = port;
-				response["mode"] = mode;
-				response["timestamp"] = static_cast<long long>(std::time(nullptr));
-				
-				res.code = 200;
-				res.set_header("Content-Type", "application/json");
-				res.write(response.dump());
-			}
-			catch(const std::exception& e)
+			if (bytesRead > 0)
 			{
-				res.code = 500;
-				res.set_header("Content-Type", "application/json");
-				res.write(R"({"status":"error","message":"Failed to connect to robot: )" + std::string(e.what()) + R"("})");
-				res.end();
-				return;
-			}			
+				coil::protocol::PktDef responsePkt(recvBuf, bytesRead);
+				bool ack = responsePkt.GetAck();
+				response["ack"]          = ack;
+				response["sim_response"] = ack ? "ACK" : "NACK";
+
+				char* bodyPtr = responsePkt.GetBodyData();
+				int   bodyLen = responsePkt.GetLength() - coil::protocol::constants::MIN_PKT_SIZE;
+				if (bodyPtr != nullptr && bodyLen > 0)
+					response["sim_message"] = std::string(bodyPtr, bodyLen);
+			}
+			else
+			{
+				response["ack"]          = false;
+				response["sim_response"] = "TIMEOUT";
+				response["sim_message"]  = "No response from simulator";
+			}
+
+			res.code = 200;
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
 		}
-		
+		catch (const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":")" + std::string(e.what()) + R"("})");
+		}
+
+		res.end();
+		return true;
+	};	
+
+	// POST /robot/connect - Configure and connect to robot or relay server
+	CROW_ROUTE(app, "/robot/connect/<string>/<int>/<string>").methods("POST"_method)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
+	{
+		// Relay mode: store PC3 address, verify it is reachable, skip socket setup
+		if (modeStr == "relay")
+		{
+			httplib::Client cli(ip, port);
+			cli.set_connection_timeout(5);
+			auto r = cli.Get("/robot/check-connection");
+
+			auto response = crow::json::wvalue();
+			if (r && r->status == 200)
+			{
+				std::lock_guard<std::mutex> lock(socketMutex);
+				relayMode = true;
+				relayHost = ip;
+				relayPort = port;
+				socketMgr = nullptr;
+
+				response["status"]    = "success";
+				response["message"]   = "Relay connected to " + ip + ":" + std::to_string(port);
+				response["ip"]        = ip;
+				response["port"]      = port;
+				response["mode"]      = 2;
+				response["timestamp"] = static_cast<long long>(std::time(nullptr));
+				res.code = 200;
+			}
+			else
+			{
+				response["status"]  = "error";
+				response["message"] = "Cannot reach relay server at " + ip + ":" + std::to_string(port);
+				res.code = 500;
+			}
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
+			res.end();
+			return;
+		}
+
+		// Direct mode (TCP or UDP): open a socket to the robot/simulator
+		int mode = (modeStr == "udp") ? 1 : 0;
+		uint bufferSize = coil::protocol::constants::DEFAULT_SIZE;
+
+		std::lock_guard<std::mutex> lock(socketMutex);
+		relayMode = false;
+
+		try
+		{
+			auto connType = static_cast<coil::protocol::ConnectionType>(mode);
+
+			socketMgr = std::make_shared<coil::protocol::MySocket>(
+				coil::protocol::SocketType::CLIENT,
+				connType,
+				port,
+				bufferSize,
+				ip
+			);
+
+			if (connType == coil::protocol::ConnectionType::TCP)
+				socketMgr->ConnectTCP();
+
+			auto response = crow::json::wvalue();
+			response["status"]    = "success";
+			response["message"]   = "Connected to robot";
+			response["ip"]        = ip;
+			response["port"]      = port;
+			response["mode"]      = mode;
+			response["timestamp"] = static_cast<long long>(std::time(nullptr));
+
+			res.code = 200;
+			res.set_header("Content-Type", "application/json");
+			res.write(response.dump());
+		}
+		catch(const std::exception& e)
+		{
+			res.code = 500;
+			res.set_header("Content-Type", "application/json");
+			res.write(R"({"status":"error","message":"Failed to connect to robot: )" + std::string(e.what()) + R"("})");
+			res.end();
+			return;
+		}
+
 		res.end();
 	});
 
 	// POST /robot/disconnect - Disconnect from robot
 	CROW_ROUTE(app, "/robot/disconnect").methods("POST"_method)
-	([&socketMgr, &socketMutex](const crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res)
 	{
+		// Relay mode: forward disconnect to PC3 then clear relay state
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Post("/robot/disconnect", "", "application/json");
+
+			relayMode = false;
+
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 200;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"json({"status":"success","message":"Relay disconnected (no response from server)"})json");
+			}
+			res.end();
+			return;
+		}
+
 		auto response = crow::json::wvalue();
 		response["status"] = "success";
 		response["message"] = "Disconnected from robot";
@@ -373,6 +607,32 @@ int main()
 			std::lock_guard<std::mutex> lock(socketMutex);
 			if (socketMgr) 
 			{
+				// Send a SLEEP packet before disconnecting so the robot enters sleep mode cleanly
+				coil::protocol::PktDef sleepPkt;
+				sleepPkt.SetPktCount(++pktCounter);
+				sleepPkt.SetCmd(coil::protocol::CmdType::SLEEP);
+				socketMgr->SendData(sleepPkt.GenPacket(), sleepPkt.GetLength());
+
+				// Wait for the robot's acknowledgement of the SLEEP command
+				char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+				int sleepBytes = socketMgr->GetData(recvBuf);
+
+				// Parse the ACK and surface it in the response so the frontend can log it
+				if (sleepBytes > 0)
+				{
+					coil::protocol::PktDef sleepResp(recvBuf, sleepBytes);
+					bool sleepAck = sleepResp.GetAck();
+					response["sleep_ack"]      = sleepAck;
+					response["sleep_response"] = sleepAck ? "ACK" : "NACK";
+					response["sleep_pkt_count"] = pktCounter;
+				}
+				else
+				{
+					response["sleep_ack"]      = false;
+					response["sleep_response"] = "TIMEOUT";
+					response["sleep_pkt_count"] = pktCounter;
+				}
+
 				socketMgr->DisconnectTCP();
 			}
 			else 
@@ -398,11 +658,26 @@ int main()
 
 	// GET /robot/check-connection - Check current connection status
 	CROW_ROUTE(app, "/robot/check-connection").methods("GET"_method)
-	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](crow::request& req, crow::response& res)
 	{
-		// Mock response - TODO: Replace with actual connection check
 		auto response = crow::json::wvalue();
-		response["connected"] = (socketMgr ? socketMgr->IsConnected() : false);
+
+		if (relayMode)
+		{
+			// In relay mode we're "connected" if PC3 is reachable and connected
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(3);
+			auto r = cli.Get("/robot/check-connection");
+			response["connected"] = (r && r->status == 200);
+			response["relay"]     = true;
+			response["relay_host"] = relayHost;
+			response["relay_port"] = relayPort;
+		}
+		else
+		{
+			response["connected"] = (socketMgr ? socketMgr->IsConnected() : false);
+			response["relay"]     = false;
+		}
 		response["status"] = "active";
 		response["message"] = "Connection is active";
 		response["timestamp"] = static_cast<long long>(std::time(nullptr));
@@ -415,19 +690,41 @@ int main()
 
 	// GET /robot/telemetry - Request robot status/telemetry
 	CROW_ROUTE(app, "/robot/telemetry_request").methods("GET"_method)
-	([&socketMgr, &socketMutex](crow::request& req, crow::response& res)
+	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](crow::request& req, crow::response& res)
 	{
+		// Relay mode: forward telemetry request to PC3
+		if (relayMode)
+		{
+			httplib::Client cli(relayHost, relayPort);
+			cli.set_connection_timeout(10);
+			auto r = cli.Get("/robot/telemetry_request");
+			if (r)
+			{
+				res.code = r->status;
+				res.set_header("Content-Type", "application/json");
+				res.write(r->body);
+			}
+			else
+			{
+				res.code = 503;
+				res.set_header("Content-Type", "application/json");
+				res.write(R"({"status":"error","message":"Relay server unreachable"})");
+			}
+			res.end();
+			return;
+		}
+
 		auto response = crow::json::wvalue();
 		coil::protocol::RobotTelemetry telemetryPkt;
 
 		try
 		{
 			std::lock_guard<std::mutex> lock(socketMutex);
-			if (socketMgr) 
+			if (socketMgr)
 			{
 				telemetryPkt = socketMgr->GetTelemetry();
 			}
-			else 
+			else
 			{
 				response["status"] = "error";
 				response["message"] = "No active connection to get telemetry from robot";
@@ -481,7 +778,7 @@ int main()
 		res.end();
 	});
 
-	app.port(23500).multithreaded().run();
+	app.port(30333).multithreaded().run();
 
 	return 0;
 }

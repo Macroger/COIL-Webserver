@@ -1,788 +1,422 @@
-/* Robot Control Dashboard Styles */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* Command log panel is visually bounded and scrolls internally when too tall */
+.command-log {
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, var(--theme-panel-bottom, var(--panel-bottom)) 100%);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.04);
+  padding-bottom: 28px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 340px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
+/* Absolute-positioned goto button inside history panel to avoid layout shifts */
+.goto-latest {
+  display: none;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 8px;
+  background: var(--accent, #1e90ff);
+  color: var(--select-foreground, #fff);
+  border: none;
+  padding: 10px 14px;
+  border-radius: 20px;
+  box-shadow: 0 14px 34px rgba(15,23,42,0.18);
+  cursor: pointer;
+  z-index: 3000;
+  font-weight: 700;
+}
+.goto-latest:hover {
+  filter: brightness(0.95);
+  box-shadow: 0 18px 40px rgba(15,23,42,0.22);
+}
+.history-panel .goto-latest {
+  display: inline-block;
+}
+.history-section {
+  position: relative;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* Telemetry cards row */
+.telemetry-cards-row {
+  display: flex;
+  flex-direction: row;
+  gap: 18px;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+.telemetry-card {
+  background: linear-gradient(180deg, var(--theme-panel-top, #f7fbff) 0%, var(--theme-panel-bottom, #e6f1ff) 100%);
+  border: 1px solid var(--card-border, #c3d0e8);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15,23,42,0.06);
+  min-width: 120px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.telemetry-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.telemetry-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+/* Minimal dashboard stylesheet - essential variables and layout only */
+
+* { box-sizing: border-box; }
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    color: #333;
-    min-height: 100vh;
-    padding: 20px;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  min-height: 100vh;
 }
 
 .dashboard-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    height: 90vh;
+  /* narrower default width so the card fits comfortably at 100% zoom */
+  max-width: 980px;
+  margin: 12px auto;
+  background: linear-gradient(180deg, var(--theme-dashboard-card-top, var(--dashboard-card-top)) 0%, var(--theme-dashboard-card-bottom, var(--dashboard-card-bottom)) 100%);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  display:flex; flex-direction:column;
+  /* Keep the card finite: allow it to grow up to the viewport but cap
+     on very large screens so it doesn't appear to continue forever when
+     zoomed out. Use `min()`/`max()` fallbacks for compatibility. */
+  min-height: 560px; /* enough to comfortably contain the control panel */
+  max-height: min(1100px, calc(100vh - 24px));
+  padding-bottom: 16px;
+  overflow: visible;
 }
 
-/* Header */
 .dashboard-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 20px 30px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 3px solid #5568d3;
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 16px 22px;  
+  /* match the dashboard card appearance while remaining a top-level element */
+  max-width: 980px;
+  margin: 12px auto;
+  background: linear-gradient(180deg, var(--theme-dashboard-card-top, var(--dashboard-card-top)) 0%, var(--theme-dashboard-card-bottom, var(--dashboard-card-bottom)) 100%);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 80;
+}
+.header-left, .header-center, .header-right 
+{ 
+    display:flex; 
+    align-items:center; 
+    gap:12px; 
 }
 
-.dashboard-header h1 {
-    font-size: 28px;
-    font-weight: 600;
+.header-center {      
+     text-align:center;
+ }
+.dashboard-header h1 { margin:0; font-size:28px; font-weight:600; }
+
+.dashboard-content { 
+  display:grid;
+  /* allocate roughly 33% to control panel and 67% to history/status */
+  grid-template-columns: minmax(260px, 33%) 1fr;
+  gap:0; 
+  flex:1 1 auto; 
+  align-items: stretch; 
+  overflow: visible; 
 }
 
-.connection-status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    font-weight: 500;
+.control-panel, .history-panel {
+  padding: 20px;
+  background: linear-gradient(180deg, var(--theme-panel-top, var(--panel-top)) 0%, var(--theme-panel-bottom, var(--panel-bottom)) 100%);
+  border: 1px solid var(--theme-panel-border, var(--panel-border));
+  box-shadow: var(--theme-panel-shadow, var(--panel-shadow));
+  display: flex; flex-direction: column; min-height: 0; /* allow proper flex children sizing */
 }
 
-.status-dot {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-}
+.control-panel { border-right: none; }
 
-.status-dot.connected {
-    background-color: #4ade80;
-    box-shadow: 0 0 10px #4ade80;
-}
-
-.status-dot.disconnected {
-    background-color: #ef4444;
-    box-shadow: 0 0 10px #ef4444;
-}
-
-.status-dot.stale {
-    background-color: #eab308;
-    box-shadow: 0 0 10px #eab308;
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.6;
-    }
-}
-
-/* Main Content */
-.dashboard-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    flex: 1;
-    gap: 0;
-    overflow: hidden;
-}
-
-/* Control Panel */
-.control-panel {
-    padding: 30px;
-    border-right: 1px solid #e5e7eb;
-    overflow-y: auto;
-    background: #f9fafb;
-}
-
-.control-panel h2,
-.history-panel h2 {
-    font-size: 20px;
-    margin-bottom: 20px;
-    color: #1f2937;
-    border-bottom: 2px solid #667eea;
-    padding-bottom: 10px;
-}
-
-.control-panel h3 {
-    font-size: 14px;
-    color: #6b7280;
-    margin-top: 20px;
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Directional Controls */
 .arrow-pad {
-    display: grid;
-    grid-template-columns: repeat(3, 60px);
-    gap: 10px;
-    justify-content: center;
-    margin: 20px 0;
-    padding: 20px;
-    background: white;
-    border-radius: 8px;
-    border: 2px solid #e5e7eb;
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 12px;
+  padding: 18px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 6px 20px rgba(15,23,42,0.04);
+  align-items: center;
+  justify-content: center;
 }
-
-.arrow-btn {
-    width: 60px;
-    height: 60px;
-    border: 2px solid #667eea;
-    background: white;
-    color: #667eea;
-    font-size: 24px;
-    font-weight: bold;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
+.arrow-btn { width:64px; height:64px; border-radius:10px; border:1px solid rgba(0,0,0,0.06); background: rgba(255,255,255,0.98); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-primary); transition: transform .12s ease, box-shadow .12s ease; }
 .arrow-btn:hover {
-    background: #667eea;
-    color: white;
-    transform: scale(1.1);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-.arrow-btn:active {
-    transform: scale(0.95);
-}
-
-.arrow-up {
-    grid-column: 2;
-}
-
-.arrow-row {
-    grid-column: 1 / 4;
-    display: grid;
-    grid-template-columns: repeat(3, 60px);
-    gap: 10px;
-    align-items: center;
-    justify-content: center;
-}
-
-.arrow-left {
-    grid-column: 1;
-}
-
-.arrow-center {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 600;
-    color: #9ca3af;
-}
-
-.arrow-right {
-    grid-column: 3;
-}
-
-.arrow-down {
-    grid-column: 2;
-}
-
-/* Numeric Inputs */
-.numeric-inputs {
-    margin-top: 20px;
-    padding: 15px;
-    background: white;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
-}
-
-.input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    margin-bottom: 15px;
-}
-
-.input-group label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-}
-
-.input-group input {
-    padding: 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 14px;
-    transition: border-color 0.2s;
-}
-
-.input-group input:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-/* Action Buttons */
-.action-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-button {
-    padding: 12px 20px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.btn-execute {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.btn-execute:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-}
-
-.btn-stop {
-    background: #ef4444;
-    color: white;
-    border: 2px solid #dc2626;
-}
-
-.btn-stop:hover {
-    background: #dc2626;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 20px rgba(239, 68, 68, 0.4);
-}
-
-.btn-status {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-status:hover {
-    background: #2563eb;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 20px rgba(59, 130, 246, 0.4);
-}
-
-/* Spinner for status button when loading */
-.btn-status.loading {
-    position: relative;
-}
-.btn-status.loading::after {
-    content: '';
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255,255,255,0.6);
-    border-top-color: white;
-    border-radius: 50%;
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: translateY(-50%) rotate(0deg); }
-    to   { transform: translateY(-50%) rotate(360deg); }
-}
-
-/* History & Status Panel */
-.history-panel {
-    padding: 30px;
-    overflow-y: auto;
-    background: #ffffff;
-    display: flex;
-    flex-direction: column;
-}
-
-.status-section {
-    margin-bottom: 30px;
-}
-
-.status-section h3,
-.history-section h3 {
-    font-size: 14px;
-    color: #6b7280;
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.status-display {
-    background: #f0f4ff;
-    padding: 15px;
-    border-radius: 6px;
-    border-left: 4px solid #667eea;
-}
-
-.status-display p {
-    font-size: 13px;
-    margin-bottom: 8px;
-    color: #374151;
-}
-
-.status-display span {
-    font-weight: 600;
-    color: #667eea;
-}
-
-/* Command History */
-.history-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.command-log {
-    flex: 1;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 15px;
-    overflow-y: auto;
-    /* Limit visible command history to ~8 entries; allow scrolling for the rest */
-    max-height: 440px;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-}
-
-.log-entry {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 10px;
-    padding: 10px;
-    margin-bottom: 8px;
-    background: white;
-    border-left: 3px solid #667eea;
-    border-radius: 3px;
-    line-height: 1.4;
-}
-
-.log-timestamp {
-    color: #9ca3af;
-    font-weight: 600;
-}
-
-.log-command {
-    color: #374151;
-}
-
-.log-success {
-    color: #16a34a;
-    font-weight: 600;
-}
-
-.log-error {
-    color: #dc2626;
-    font-weight: 600;
-}
-
-.log-empty {
-    color: #9ca3af;
-    text-align: center;
-    padding: 20px;
-    font-style: italic;
-}
-
-/* Settings Button */
-.btn-settings {
-    background: transparent;
-    border: none;
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 5px 10px;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.btn-settings:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-}
-
-/* Settings Panel */
-.settings-panel {
-    background: #f9fafb;
-    border-bottom: 2px solid #e5e7eb;
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-}
-
-.settings-panel.hidden {
-    display: none;
-}
-
-/* Telemetry status bar (horizontal cards) */
-.status-bar {
-    display: flex;
-    gap: 12px;
-    padding: 12px;
-    align-items: stretch;
-    flex-wrap: wrap;
-}
-
-.status-card {
-    min-width: 120px;
-    max-width: 220px;
-    background: white;
-    border-radius: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-    border-left: 4px solid rgba(102, 126, 234, 0.12);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.status-card .card-label {
-    font-size: 12px;
-    color: #6b7280;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-}
-
-.status-card .card-value {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-}
-
-.status-card.small {
-    min-width: 90px;
-    padding: 8px;
-}
-
-.status-card.warning { border-left-color: #f59e0b; }
-.status-card.alert { border-left-color: #ef4444; }
-.status-card.ok { border-left-color: #10b981; }
-
-.status-bar .status-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
-}
-
-@media (max-width: 640px) {
-    .status-card { min-width: 100px; max-width: 160px; }
-}
-
-.settings-panel.visible {
-    max-height: 500px;
-    display: block;
-}
-
-.settings-content {
-    padding: 20px 30px;
-}
-
-.settings-content h3 {
-    font-size: 16px;
-    margin-bottom: 15px;
-    color: #1f2937;
-    border-bottom: 2px solid #667eea;
-    padding-bottom: 8px;
-}
-
-/* Telemetry header inside the telemetry panel */
-.telemetry-header h3 {
-    font-size: 16px;
-    margin: 0;
-    color: #1f2937;
-}
-
-.telemetry-header .btn-status {
-    margin-left: 12px;
-}
-
-.settings-group {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 15px;
-}
-
-.settings-buttons {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.btn-connect,
-.btn-disconnect,
-.btn-reconnect {
-    flex: 1;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    transition: all 0.3s ease;
-}
-
-.btn-connect {
-    background: #16a34a;
-    color: white;
-}
-
-.btn-connect:hover {
-    background: #15803d;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(22, 163, 74, 0.4);
-}
-
-.btn-disconnect {
-    background: #dc2626;
-    color: white;
-}
-
-.btn-disconnect:hover {
-    background: #b91c1c;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(220, 38, 38, 0.4);
-}
-
-.btn-reconnect {
-    background: #3b82f6;
-    color: white;
-}
-
-.btn-reconnect:hover {
-    background: #2563eb;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
-}
-
-.settings-status {
-    font-size: 12px;
-    color: #6b7280;
-    padding: 10px;
-    background: white;
-    border-radius: 4px;
-    border-left: 3px solid #667eea;
-}
-
-.settings-status p {
-    margin: 5px 0;
-}
-
-.settings-status span {
-    font-weight: 600;
-    color: #667eea;
-}
-
-/* Range Input Styling */
-input[type="range"] {
-    width: 100%;
-    height: 6px;
-    border-radius: 3px;
-    background: linear-gradient(to right, #e5e7eb, #d1d5db);
-    outline: none;
-    -webkit-appearance: none;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #667eea;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.4);
-}
-
-input[type="range"]::-webkit-slider-thumb:hover {
-    background: #764ba2;
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.6);
-    transform: scale(1.2);
-}
-
-input[type="range"]::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #667eea;
-    cursor: pointer;
-    border: none;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.4);
-}
-
-input[type="range"]::-moz-range-thumb:hover {
-    background: #764ba2;
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.6);
-    transform: scale(1.2);
-}
-
-/* Display spans for range values */
-#durationDisplay,
-#powerDisplay {
-    display: inline-block;
-    margin-left: 10px;
-    font-weight: 600;
-    color: #667eea;
-    min-width: 40px;
-}
-
-/* Select dropdown styling */
-select {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 14px;
-    background-color: white;
-    cursor: pointer;
-    transition: border-color 0.2s;
-}
-
-select:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f5f9;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-    .dashboard-content {
-        /* Keep in flow but collapsed so transitions can animate */
-        max-height: 0;
-        opacity: 0;
-    }
-
-        max-height: 500px;
-        opacity: 1;
-        border-bottom: 1px solid #e5e7eb;
-    }
-
-    .dashboard-header {
-        flex-direction: column;
-        gap: 10px;
-        text-align: center;
-    }
-
-    .dashboard-container {
-        height: auto;
-    }
-}
-
-/* Comm Console: ensure minimum visible size and scrolling */
-.comm-console {
-    background: #0b0b0b;
-    color: #e6e6e6;
-    font-family: monospace;
-    font-size: 12px;
-    padding: 8px;
-    min-height: 220px; /* ~10 lines */
-    max-height: 520px;
-    overflow-y: auto;
-    border-radius: 4px;
-    border: 1px solid #222;
-    white-space: pre-wrap;
-}
-
-/* Make console panel taller than default panels */
-#consolePanel.settings-panel.visible {
-    max-height: 700px;
-}
-
-/* Force console to a reasonable max height inside the console panel so it becomes scrollable */
-#consolePanel .comm-console {
-    max-height: 320px;
-    min-height: 180px;
-    overflow-y: auto;
-    box-sizing: border-box;
-    width: 100%;
-}
-
-@media (max-width: 640px) {
-    .dashboard-header h1 {
-        font-size: 20px;
-    }
-
-    .arrow-pad {
-        grid-template-columns: repeat(3, 50px);
-    }
-
-    .arrow-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 20px;
-    }
-
-    .control-panel,
-    .history-panel {
-        padding: 15px;
-    }
-
-    .comm-console {
-        background: #0b0b0b;
-        color: #e6e6e6;
-        font-family: monospace;
-        font-size: 12px;
-        padding: 8px;
-        height: 200px;
-        overflow-y: auto;
-        border-radius: 4px;
-        border: 1px solid #222;
-        white-space: pre-wrap;
-    }
-
-    .console-controls {
-        margin-top: 8px;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-    }
-
-    .btn-clear-console {
-        padding: 6px 10px;
-    }
-
-    .console-auto-scroll input { margin-right: 6px; }
-
-    .dashboard-header {
-        padding: 15px;
-    }
-}
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(37,99,235,0.18);
+}
+.arrow-btn.processing { background: var(--danger, #ef4444) !important; color:#fff; border-color: var(--danger, #ef4444); }
+
+.arrow-row { grid-column: 1 / 4; display:flex; gap:12px; align-items:center; justify-content:center; }
+.arrow-up { grid-column: 2; }
+.arrow-left { }
+.arrow-right { }
+.arrow-down { grid-column: 2; }
+.arrow-center { text-align:center; font-size:12px; color:var(--text-muted); }
+
+.numeric-inputs { margin-top:18px; display:flex; flex-direction:column; gap:12px; }
+.input-group { display: grid; grid-template-columns: 120px 1fr 48px; gap: 12px; align-items: center; margin-bottom: 8px; }
+.input-group label { margin: 0; font-size:14px; color:var(--text-muted); }
+.input-group input[type="range"] { width: 100%; }
+.input-group span { text-align: left; font-size:13px; color:var(--text-muted); }
+
+
+/* Flex row for label/input alignment */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.field-row label {
+  width: 130px;
+  min-width: 130px;
+  max-width: 130px;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-right: 0;
+}
+.field-row input,
+.field-row select {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: white;
+  margin-left: 0;
+}
+
+/* Keep grid for overall layout, but use .field-row for label/input pairs */
+.connection-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+}
+.connection-grid .grid-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.connection-grid .grid-middle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.connection-grid .action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 240px;
+}
+
+/* Improved button styles for Connect, Disconnect, and Request Status */
+.btn, .btn-status {
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 14px 24px;
+  font-size: 17px;
+  border: none;
+  box-shadow: 0 4px 18px rgba(30, 144, 255, 0.10), 0 1.5px 4px rgba(0,0,0,0.07);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  cursor: pointer;
+}
+.btn-connect, .btn-disconnect, .btn-status {
+  background: linear-gradient(135deg, #23272f 0%, #374151 100%);
+  color: #fff;
+  border: 1.5px solid #4b5563;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 14px 24px;
+  font-size: 17px;
+  box-shadow: 0 8px 28px rgba(30, 40, 60, 0.18), 0 2px 8px rgba(0,0,0,0.13);
+  letter-spacing: 0.02em;
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  cursor: pointer;
+  min-width: 180px;
+  min-height: 48px;
+  display: inline-block;
+}
+.btn-connect:hover, .btn-disconnect:hover, .btn-status:hover {
+  background: linear-gradient(135deg, #111827 0%, #23272f 100%);
+  color: #fff;
+  box-shadow: 0 14px 36px rgba(30,40,60,0.22), 0 3px 12px rgba(0,0,0,0.16);
+  transform: translateY(-2px) scale(1.04);
+}
+
+/* Clear History button */
+.btn-connect-sim {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #1a3a5c 0%, #1e5fa8 100%);
+  color: #fff;
+  border: 1.5px solid #2563eb;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(30, 95, 168, 0.18);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-connect-sim:hover {
+  background: linear-gradient(135deg, #1e5fa8 0%, #2563eb 100%);
+  box-shadow: 0 6px 18px rgba(30, 95, 168, 0.28);
+  transform: translateY(-1px) scale(1.03);
+}
+
+/* Input field highlight when sim preset fills them */
+@keyframes sim-fill-flash {
+  0%   { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.0); background: inherit; }
+  30%  { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5); background: rgba(37, 99, 235, 0.08); }
+  100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.0); background: inherit; }
+}
+.sim-filled {
+  animation: sim-fill-flash 1.5s ease-out forwards;
+  border-radius: 6px;
+}
+
+.btn-clear-history {
+  background: linear-gradient(135deg, #23272f 0%, #374151 100%);
+  color: #fff;
+  border: 1.5px solid #4b5563;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 15px;
+  box-shadow: 0 4px 18px rgba(30, 40, 60, 0.13), 0 1.5px 4px rgba(0,0,0,0.10);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  cursor: pointer;
+  min-width: unset;
+  min-height: unset;
+  display: inline-block;
+}
+.btn-clear-history:hover {
+  background: linear-gradient(135deg, #111827 0%, #23272f 100%);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(30,40,60,0.18), 0 2px 8px rgba(0,0,0,0.13);
+  transform: translateY(-2px) scale(1.04);
+}
+
+.log-entry { display:flex; gap:12px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,0.03); align-items:flex-start; }
+.log-timestamp { color:var(--text-muted); font-weight:600; width:92px; font-size:12px; }
+.log-text { color:var(--text-primary); white-space:pre-wrap; font-family: 'Courier New', monospace; font-size:13px; }
+.log-error { color:var(--danger, #ef4444); font-weight:700; }
+.log-success { color:var(--success, #4ade80); font-weight:700; }
+
+.status-cards { display:flex; gap:12px; margin-bottom:16px; }
+.status-cards.collapsed { display: none; }
+
+/* Status toggle (bigger, link-like, mobile-friendly) */
+.status-toggle {
+  background: transparent;
+  border: none;
+  color: var(--accent, #1e90ff);
+  font-size: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  margin-left: 4px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.status-toggle:hover { text-decoration: underline; background: rgba(30,144,255,0.04); }
+.status-toggle:focus { outline: 2px solid rgba(30,144,255,0.18); outline-offset: 2px; }
+.status-toggle .toggle-icon { display:inline-block; transition: transform .18s ease; font-size: 18px; }
+.status-toggle[aria-expanded="true"] .toggle-icon { transform: rotate(0deg); }
+.status-toggle[aria-expanded="false"] .toggle-icon { transform: rotate(-90deg); }
+.status-small-card { background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-muted)); border:1px solid rgba(15,23,42,0.08); padding:12px 14px; border-radius:12px; box-shadow: 0 10px 30px rgba(15,23,42,0.07); min-width:140px; text-align:center; transition: transform .12s ease, box-shadow .12s ease; }
+.status-small-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(15,23,42,0.09); }
+.status-small-card .label { font-size:12px; color:var(--text-muted); margin-bottom:6px; }
+.status-small-card .value { font-weight:700; }
+
+.comm-console { 
+  background:#0b0b0b; 
+  color:#e6e6e6; 
+  font-family:monospace; 
+  padding:8px; 
+  border-radius:6px; 
+  min-height:200px;
+  max-height:200px;  
+  overflow-y:auto; 
+}
+
+.settings-panel { overflow:hidden; transition: max-height 0.28s ease, padding 0.28s ease; max-height:0; padding:0; }
+.settings-panel.visible { max-height:720px; padding:12px 20px; }
+
+/* Panel wrap constrains top widgets to the dashboard width and centers them */
+.panel-wrap { max-width: 980px; margin: 12px auto; padding: 0; box-sizing: border-box; display:flex; flex-direction:column; gap:12px; }
+/* Make widget panels look like separate cards sitting between header and main card */
+.panel-wrap .settings-panel {
+  background: linear-gradient(180deg, var(--theme-panel-top, #ffffff) 0%, var(--theme-panel-bottom, #f7fbff) 100%);
+  border: 1px solid rgba(15,23,42,0.06);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.06);
+  padding: 12px 22px;
+  transition: max-height 0.28s ease, padding 0.28s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+.panel-wrap .settings-content { background: transparent; padding: 0; }
+
+/* Keep header visually above panels when panels expand */
+.dashboard-header { position: relative; z-index: 60; }
+
+/* Ensure panels don't visually merge with the dashboard card below */
+.panel-wrap .settings-panel + .settings-panel { margin-top: 6px; }
+
+/* Hide collapsed panels completely (no visible rounded bars) */
+.panel-wrap .settings-panel.hidden { display: none; }
+
+select.theme-picker-select 
+{ 
+    background: linear-gradient(180deg,
+    var(--theme-panel-top, #EDF6FF) 0%,
+    var(--theme-panel-bottom, #E6F1FF) 100%);
+    border: 1px solid rgba(0,0,0,0.06);
+    color: var(--text-primary);
+}
+
+button { padding:8px 12px; border-radius:6px; border:none; cursor:pointer; }
+.btn-primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--select-foreground); }
+
+/* Small helpers kept for JS hooks */
+.processing-message { padding:10px; border-left:4px solid #ef4444; display:none; }
+.processing-message.visible { display:block; }
+
+/* keep monospace class used for logs */
+.log-empty { color: var(--text-muted); text-align:center; padding:20px; font-style:italic; }
+
+/* responsive */
+@media (max-width: 840px) { .dashboard-content { grid-template-columns: 1fr; } .header-center { order:2; } }
+
+/* End minimal dashboard styles */

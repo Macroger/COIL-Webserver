@@ -128,46 +128,64 @@ if [[ "$NO_BOOST" -eq 0 ]]; then
   else
     # First try to use the system package manager on Debian/Ubuntu to install boost dev packages
     SKIP_BOOST_BUILD=0
-    if have_cmd apt-get && [[ $(id -u) -eq 0 ]]; then
-      echo "Detected apt-get and running as root — installing boost dev packages via apt"
-      apt-get update
-      apt-get install -y --no-install-recommends libboost-system-dev libboost-filesystem-dev || true
-      # If install succeeded, prefer system boost (CMake will find it)
-      if ldconfig -p | grep -q libboost_system; then
-        echo "System Boost libraries appear available; skipping local Boost build."
-        SKIP_BOOST_BUILD=1
-      else
-        echo "System Boost installation did not make libraries available; falling back to local build."
+    APT_SUDO=""
+    if have_cmd apt-get; then
+      if [[ $(id -u) -ne 0 ]] && have_cmd sudo; then
+        APT_SUDO="sudo"
+      fi
+      if [[ $(id -u) -eq 0 ]] || have_cmd sudo; then
+        echo "Installing boost dev packages via apt"
+        $APT_SUDO apt-get update -qq
+        $APT_SUDO apt-get install -y --no-install-recommends libboost-system-dev libboost-filesystem-dev || true
+        # If install succeeded, prefer system boost (CMake will find it)
+        if ldconfig -p | grep -q libboost_system; then
+          echo "System Boost libraries available; skipping local Boost build."
+          SKIP_BOOST_BUILD=1
+        else
+          echo "System Boost installation did not make libraries available; falling back to local build."
+        fi
       fi
     fi
 
     if [[ $SKIP_BOOST_BUILD -eq 0 ]]; then
       # Download boost source tarball (fallback)
+      # Try multiple URLs: archives.boost.io (official), then GitHub releases (dashes in asset name)
       BOOST_DIRNAME=boost_$(echo "$BOOST_VERSION" | tr . _)
-      BOOST_TARBALL="$BOOST_DIRNAME".tar.gz
-      # Prefer the official GitHub release URL for reliable downloads
-      BOOST_URL="https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/${BOOST_TARBALL}"
-      TMPDIR=$(mktemp -d)
-      trap 'rm -rf "$TMPDIR"' RETURN
-      echo "Downloading Boost $BOOST_VERSION from $BOOST_URL"
-      # use curl if available to follow redirects, otherwise wget
-      if have_cmd curl; then
-        curl -L -o "$TMPDIR/boost.tar.gz" "$BOOST_URL"
-      else
-        wget -qO "$TMPDIR/boost.tar.gz" "$BOOST_URL" || true
-      fi
+      BOOST_TMPDIR=$(mktemp -d)
+      trap 'rm -rf "$BOOST_TMPDIR"' RETURN
+      BOOST_URLS=(
+        "https://archives.boost.io/release/${BOOST_VERSION}/source/${BOOST_DIRNAME}.tar.gz"
+        "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}.tar.gz"
+      )
+      BOOST_DOWNLOADED=0
+      for BOOST_URL in "${BOOST_URLS[@]}"; do
+        echo "Trying to download Boost $BOOST_VERSION from $BOOST_URL"
+        if have_cmd curl; then
+          curl -fsSL -o "$BOOST_TMPDIR/boost.tar.gz" "$BOOST_URL" 2>/dev/null && BOOST_DOWNLOADED=1 || true
+        else
+          wget -qO "$BOOST_TMPDIR/boost.tar.gz" "$BOOST_URL" 2>/dev/null && BOOST_DOWNLOADED=1 || true
+        fi
+        if tar -tzf "$BOOST_TMPDIR/boost.tar.gz" >/dev/null 2>&1; then
+          echo "Download succeeded from $BOOST_URL"
+          break
+        fi
+        echo "That URL did not return a valid archive, trying next..."
+        BOOST_DOWNLOADED=0
+      done
 
-      # Validate the archive is a tar.gz
-      if ! tar -tzf "$TMPDIR/boost.tar.gz" >/dev/null 2>&1; then
-        echo "Downloaded file is not a valid tar.gz — aborting Boost local build."
-        echo "You can install Boost via your package manager (apt/yum/apk) and re-run this script, or retry with a correct archive." >&2
+      if [[ $BOOST_DOWNLOADED -eq 0 ]]; then
+        echo "ERROR: Could not download a valid Boost $BOOST_VERSION archive from any known URL." >&2
+        echo "Install Boost manually (e.g. sudo apt-get install libboost-dev) and re-run." >&2
         exit 6
       fi
 
+      # Detect extracted top-level directory (handles both underscore and dash naming)
       echo "Extracting Boost"
-      tar -xzf "$TMPDIR/boost.tar.gz" -C "$TMPDIR"
-      SRC="$TMPDIR/$BOOST_DIRNAME"
-      if [[ ! -d "$SRC" ]]; then echo "Failed to extract Boost"; exit 7; fi
+      tar -xzf "$BOOST_TMPDIR/boost.tar.gz" -C "$BOOST_TMPDIR"
+      SRC=$(find "$BOOST_TMPDIR" -maxdepth 1 -mindepth 1 -type d -print -quit)
+      if [[ -z "$SRC" || ! -f "$SRC/bootstrap.sh" ]]; then
+        echo "ERROR: Failed to find Boost source tree after extraction." >&2; exit 7
+      fi
 
       pushd "$SRC" >/dev/null
       echo "Bootstrapping Boost (this may take a minute)"
@@ -190,38 +208,45 @@ echo "==> Ensuring cpp-httplib in external/httplib"
 if [[ -d external/httplib && -f external/httplib/include/httplib.h ]]; then
   echo "cpp-httplib already present under external/httplib/include, skipping clone/download."
 else
+  mkdir -p external/httplib/include
   if have_cmd git; then
-    echo "Cloning cpp-httplib (shallow) into external/httplib"
-    rm -rf external/httplib
-    git clone --depth 1 https://github.com/yhirose/cpp-httplib.git external/httplib
-    mkdir -p external/httplib/include
-    if [[ -f external/httplib/httplib.h ]]; then
-      mv external/httplib/httplib.h external/httplib/include/
-      echo "Moved httplib.h to external/httplib/include/"
+    echo "Cloning cpp-httplib (shallow) into temp dir"
+    HTTPLIB_TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$HTTPLIB_TMPDIR"' RETURN
+    git clone --depth 1 https://github.com/yhirose/cpp-httplib.git "$HTTPLIB_TMPDIR/cpp-httplib"
+    if [[ -f "$HTTPLIB_TMPDIR/cpp-httplib/httplib.h" ]]; then
+      cp "$HTTPLIB_TMPDIR/cpp-httplib/httplib.h" external/httplib/include/
+      echo "Copied httplib.h to external/httplib/include/"
+    else
+      echo "ERROR: httplib.h not found in cloned repo — aborting." >&2; exit 8
     fi
-    echo "Done cloning cpp-httplib."
+    echo "Done installing cpp-httplib."
   else
     echo "git not available — attempting to download release tarball"
-    TMPDIR=$(mktemp -d)
-    trap 'rm -rf "$TMPDIR"' RETURN
+    HTTPLIB_TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$HTTPLIB_TMPDIR"' RETURN
     HTTPLIB_URL="https://github.com/yhirose/cpp-httplib/archive/refs/heads/master.tar.gz"
     echo "Downloading $HTTPLIB_URL"
-    wget -qO "$TMPDIR/httplib.tar.gz" "$HTTPLIB_URL"
-    mkdir -p external/httplib
-    tar -xzf "$TMPDIR/httplib.tar.gz" -C "$TMPDIR"
-    SRC=$(find "$TMPDIR" -maxdepth 2 -type d -name include -print -quit)
-    mkdir -p external/httplib/include
-    if [[ -z "$SRC" ]]; then
-      # fallback: look for httplib.h at top level
-      if [[ -f "$TMPDIR/cpp-httplib-master/httplib.h" ]]; then
-        cp "$TMPDIR/cpp-httplib-master/httplib.h" external/httplib/include/
-      else
-        echo "Failed to locate include or httplib.h in downloaded httplib archive"; exit 8;
-      fi
+    if have_cmd curl; then
+      curl -fsSL -o "$HTTPLIB_TMPDIR/httplib.tar.gz" "$HTTPLIB_URL"
     else
-      cp -r "$SRC/"* external/httplib/include/
+      wget -qO "$HTTPLIB_TMPDIR/httplib.tar.gz" "$HTTPLIB_URL"
     fi
+    tar -xzf "$HTTPLIB_TMPDIR/httplib.tar.gz" -C "$HTTPLIB_TMPDIR"
+    # Locate httplib.h anywhere in the extracted archive (works regardless of branch/tag name)
+    HTTPLIB_H=$(find "$HTTPLIB_TMPDIR" -name "httplib.h" -print -quit)
+    if [[ -z "$HTTPLIB_H" ]]; then
+      echo "ERROR: Failed to locate httplib.h in downloaded archive." >&2; exit 8
+    fi
+    cp "$HTTPLIB_H" external/httplib/include/
+    echo "Copied httplib.h to external/httplib/include/"
   fi
+fi
+
+# Final verification
+if [[ ! -f external/httplib/include/httplib.h ]]; then
+  echo "ERROR: cpp-httplib installation failed — external/httplib/include/httplib.h not found." >&2
+  exit 8
 fi
 echo "cpp-httplib ready (external/httplib/include)."
 

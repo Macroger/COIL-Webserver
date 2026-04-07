@@ -24,6 +24,7 @@ COPY . .
 # It is gitignored so we clone it here before building.
 # ASIO is fetched automatically by CMake FetchContent during configure.
 RUN git clone --depth 1 https://github.com/CrowCpp/Crow.git external/crow
+RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git external/httplib
 
 # Configure and build the project
 # The binary is placed in /app/ by RUNTIME_OUTPUT_DIRECTORY in CMakeLists.txt
@@ -31,7 +32,7 @@ RUN cmake -B build -S . && \
     cmake --build build --parallel
 
 # Expose the webserver port
-EXPOSE 23500
+EXPOSE 30333
 
 # Run the server
 CMD ["./COIL_WEBSERVER"]

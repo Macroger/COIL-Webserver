@@ -572,8 +572,10 @@ namespace coil::protocol
 
 	/// @brief Checks if the TCP connection is currently established
 	/// @return true if connected, false otherwise
-	bool MySocket::IsConnected() const 
+	bool MySocket::IsConnected() const
 	{
+		if (ConnType == ConnectionType::UDP)
+			return (ConnectionSocket != INVALID_SOCKET);
 		return bTCPConnected;
 	}
 

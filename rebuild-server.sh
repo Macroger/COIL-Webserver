@@ -32,7 +32,11 @@ done
 
 if [[ $FULL -eq 1 ]]; then
 	echo "Performing full rebuild: removing build/"
-	rm -rf ./build/
+	if ! rm -rf ./build/ 2>/dev/null; then
+		echo "Permission denied removing build/ — fixing ownership with sudo..."
+		sudo chown -R "$(id -u):$(id -g)" ./build/
+		rm -rf ./build/
+	fi
 else
 	echo "Performing incremental build (preserves build/). Use --full to force clean rebuild."
 fi

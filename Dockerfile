@@ -1,3 +1,4 @@
+
 # Use Ubuntu 24.04 as the base image
 FROM ubuntu:24.04
 
@@ -14,11 +15,20 @@ RUN apt-get update && apt-get install -y \
     libboost-filesystem-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user and group
+RUN useradd -ms /bin/bash coiluser
+
 # Set the working directory in the container
 WORKDIR /app
 
 # Copy the project source into the container
 COPY . .
+
+# Set ownership of /app to the non-root user
+RUN chown -R coiluser:coiluser /app
+
+# Switch to the non-root user
+USER coiluser
 
 # Clone all header-only / source dependencies into external/ before building.
 # Crow and ASIO are gitignored; httplib is also cloned here for relay mode.

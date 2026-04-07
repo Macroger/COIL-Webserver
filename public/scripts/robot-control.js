@@ -57,6 +57,7 @@ class RobotController {
         // Comm console
         this.commConsole = document.getElementById('commConsole');
         this.btnClearConsole = document.getElementById('btnClearConsole');
+        this.btnDownloadConsole = document.getElementById('btnDownloadConsole');
         this.autoScroll = document.getElementById('autoScroll');
 
         // Sleep button
@@ -92,6 +93,7 @@ class RobotController {
 
         // Console controls
         if (this.btnClearConsole) this.btnClearConsole.addEventListener('click', () => this.clearConsole());
+        if (this.btnDownloadConsole) this.btnDownloadConsole.addEventListener('click', () => this.downloadConsole());
 
         // Telemetry button — request telemetry directly
         if (this.btnTelemetry && this.telemetryPanel) 
@@ -482,6 +484,20 @@ class RobotController {
     clearConsole() {
         if (!this.commConsole) return;
         this.commConsole.innerHTML = '';
+    }
+
+    downloadConsole() {
+        if (!this.commConsole) return;
+        const lines = [...this.commConsole.querySelectorAll('.console-line')]
+            .map(el => el.textContent)
+            .join('\n');
+        const blob = new Blob([lines], { type: 'text/plain' });
+        const a = Object.assign(document.createElement('a'), {
+            href: URL.createObjectURL(blob),
+            download: `console-${Date.now()}.txt`
+        });
+        a.click();
+        URL.revokeObjectURL(a.href);
     }
 
     showRawPacket(bytes) {

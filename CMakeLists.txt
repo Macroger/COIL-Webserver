@@ -12,7 +12,6 @@ project(COIL_WEBSERVER LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 # --------------------------
@@ -86,13 +85,14 @@ target_include_directories(
 # --------------------------
 # ASIO (used by Crow / webserver only)
 # --------------------------
-FetchContent_Declare(
-  asio
-  GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
-  GIT_TAG        master
-)
+# Dependency fetching removed; see install_scripts/install_deps.sh
 
-FetchContent_Populate(asio)
+# --------------------------
+# cpp-httplib
+# --------------------------
+# Dependency fetching removed; see install_scripts/install_deps.sh
+
+
 
 # Allow using a vendored copy under external/asio/include to avoid network fetches.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/include")
@@ -100,13 +100,21 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/include")
 elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/asio/include")
   set(asio_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/external/asio/asio/include")
 else()
-  set(asio_include_dir "${asio_SOURCE_DIR}/asio/include")
+  message(FATAL_ERROR "ASIO not found in external/asio/include or external/asio/asio/include. Please run install_scripts/install_deps.sh.")
+endif()
+
+# Use vendored httplib if present
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/httplib/include/httplib.h")
+  set(httplib_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/external/httplib/include")
+else()
+  message(FATAL_ERROR "cpp-httplib not found in external/httplib/include. Please run install_scripts/install_deps.sh.")
 endif()
 
 target_include_directories(
   COIL_WEBSERVER
   PRIVATE
     ${asio_include_dir}
+    ${httplib_include_dir}
 )
 
 target_compile_definitions(
@@ -126,6 +134,10 @@ target_link_libraries(
     Boost::filesystem
     Threads::Threads
 )
+
+
+# No need to link httplib (header-only)
+
 
 # --------------------------
 # Project include directory (webserver-specific headers)

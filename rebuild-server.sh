@@ -11,6 +11,9 @@
 # - re-runs CMake configure into `build/`
 # - builds using parallel jobs (defaults to number of CPU cores)
 
+echo "Interpreter: $0"
+ps -p $$ -o comm=
+
 
 set -euo pipefail
 

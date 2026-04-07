@@ -36,6 +36,25 @@ mkdir -p external
 
 function have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+
+# Ensure git is installed (required for CMake FetchContent / ExternalProject)
+###############################################################################
+if ! command -v git >/dev/null 2>&1; then
+  echo "git not found — attempting to install"
+
+  if command -v apt-get >/dev/null 2>&1 && [[ $(id -u) -eq 0 ]]; then
+    apt-get update
+    apt-get install -y --no-install-recommends git
+  elif command -v apk >/dev/null 2>&1 && [[ $(id -u) -eq 0 ]]; then
+    apk add --no-cache git
+  else
+    echo "ERROR: git is required but could not be installed automatically."
+    echo "Please install git manually and re-run this script." >&2
+    exit 10
+  fi
+fi
+
+
 ###############################################################################
 # Asio
 ###############################################################################
@@ -101,10 +120,11 @@ fi
 ###############################################################################
 # Boost (build + install into external/boost)
 ###############################################################################
+
 if [[ "$NO_BOOST" -eq 0 ]]; then
   echo "==> Ensuring Boost (will build system/filesystem) into external/boost"
   if [[ -d external/boost && -d external/boost/include && -d external/boost/lib ]]; then
-    echo "Boost appears installed under external/boost, skipping build."
+    echo "Boost already present under external/boost, skipping download/build."
   else
     # First try to use the system package manager on Debian/Ubuntu to install boost dev packages
     SKIP_BOOST_BUILD=0
@@ -160,6 +180,50 @@ if [[ "$NO_BOOST" -eq 0 ]]; then
     fi
   fi
 fi
+
+
+###############################################################################
+# cpp-httplib (header-only)
+###############################################################################
+echo "==> Ensuring cpp-httplib in external/httplib"
+
+if [[ -d external/httplib && -f external/httplib/include/httplib.h ]]; then
+  echo "cpp-httplib already present under external/httplib/include, skipping clone/download."
+else
+  if have_cmd git; then
+    echo "Cloning cpp-httplib (shallow) into external/httplib"
+    rm -rf external/httplib
+    git clone --depth 1 https://github.com/yhirose/cpp-httplib.git external/httplib
+    mkdir -p external/httplib/include
+    if [[ -f external/httplib/httplib.h ]]; then
+      mv external/httplib/httplib.h external/httplib/include/
+      echo "Moved httplib.h to external/httplib/include/"
+    fi
+    echo "Done cloning cpp-httplib."
+  else
+    echo "git not available — attempting to download release tarball"
+    TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$TMPDIR"' RETURN
+    HTTPLIB_URL="https://github.com/yhirose/cpp-httplib/archive/refs/heads/master.tar.gz"
+    echo "Downloading $HTTPLIB_URL"
+    wget -qO "$TMPDIR/httplib.tar.gz" "$HTTPLIB_URL"
+    mkdir -p external/httplib
+    tar -xzf "$TMPDIR/httplib.tar.gz" -C "$TMPDIR"
+    SRC=$(find "$TMPDIR" -maxdepth 2 -type d -name include -print -quit)
+    mkdir -p external/httplib/include
+    if [[ -z "$SRC" ]]; then
+      # fallback: look for httplib.h at top level
+      if [[ -f "$TMPDIR/cpp-httplib-master/httplib.h" ]]; then
+        cp "$TMPDIR/cpp-httplib-master/httplib.h" external/httplib/include/
+      else
+        echo "Failed to locate include or httplib.h in downloaded httplib archive"; exit 8;
+      fi
+    else
+      cp -r "$SRC/"* external/httplib/include/
+    fi
+  fi
+fi
+echo "cpp-httplib ready (external/httplib/include)."
 
 echo "All requested dependencies are installed under external/"
 echo "You can now run: cmake -S . -B build && cmake --build build -- -j$(nproc)"

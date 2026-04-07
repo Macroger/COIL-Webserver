@@ -16,6 +16,7 @@ class ConnectionConfig {
         this.currentPort = 5000;
         this.udpHeartbeatTimeout = null;
         this.lastHeartbeat = null;
+        this.sleepSent = false;
         this.initializeElements();
         this.attachEventListeners();
         this.loadSavedConfig();
@@ -131,6 +132,7 @@ class ConnectionConfig {
                 this.currentMode = mode;
                 this.isConnected = true;
                 this.lastHeartbeat = new Date();
+                this.sleepSent = false;
                 this.saveConfig();
                 this.updateConnectionDisplay();
                 this.startHeartbeatMonitor();
@@ -201,7 +203,8 @@ class ConnectionConfig {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify({ skip_sleep: this.sleepSent })
             });
 
             let disconnectData = null;
@@ -211,9 +214,13 @@ class ConnectionConfig {
             } catch (_) { /* ignore parse errors */ }
 
             // Log the SLEEP signal result to the raw message console
-            const sleepResponse = disconnectData?.sleep_response ?? 'UNKNOWN';
-            const sleepPkt = disconnectData?.sleep_pkt_count ?? '?';
-            window.robotController?.appendConsole(`POST /robot/disconnect -> SLEEP pkt #${sleepPkt}: ${sleepResponse}`);
+            if (this.sleepSent) {
+                window.robotController?.appendConsole('POST /robot/disconnect -> SLEEP skipped (already sent)');
+            } else {
+                const sleepResponse = disconnectData?.sleep_response ?? 'UNKNOWN';
+                const sleepPkt = disconnectData?.sleep_pkt_count ?? '?';
+                window.robotController?.appendConsole(`POST /robot/disconnect -> SLEEP pkt #${sleepPkt}: ${sleepResponse}`);
+            }
 
             // Record the SLEEP command outcome in command history
             window.commandHistory?.addEntry({

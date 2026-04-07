@@ -59,6 +59,9 @@ class RobotController {
         this.btnClearConsole = document.getElementById('btnClearConsole');
         this.autoScroll = document.getElementById('autoScroll');
 
+        // Sleep button
+        this.btnSleep = document.getElementById('btnSleep');
+
         // Console & telemetry toggles
         this.btnTelemetry = document.getElementById('btnTelemetry');
         this.telemetryPanel = document.getElementById('telemetryPanel');
@@ -114,6 +117,9 @@ class RobotController {
 
         // Status button
         if (this.btnStatus) this.btnStatus.addEventListener('click', () => this.requestStatus());
+
+        // Sleep button
+        if (this.btnSleep) this.btnSleep.addEventListener('click', () => this.sendSleep());
     }
 
     /* --- Input handlers --- */
@@ -465,6 +471,48 @@ class RobotController {
         if (typeof value === 'string' && value.trim() === '') return fallback;
         const n = Number(value);
         return Number.isFinite(n) ? n : fallback;
+    }
+
+    async sendSleep() {
+        if (this.btnSleep) {
+            this.btnSleep.disabled = true;
+        }
+        this.appendConsole('PUT /robot/telecommand (SLEEP) -> sending...');
+        try {
+            const response = await fetch('/robot/telecommand', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'SLEEP' })
+            });
+
+            let responseData = null;
+            try {
+                const ct = response.headers.get('content-type') || '';
+                if (ct.includes('application/json')) responseData = await response.json();
+            } catch (_) {}
+
+            if (response.ok) {
+                const pktNum = responseData?.packet_count ?? '?';
+                const simResponse = responseData?.sim_response || 'UNKNOWN';
+                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ${simResponse} (pkt #${pktNum})`);
+                if (window.connectionConfig) window.connectionConfig.sleepSent = true;
+            } else {
+                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ERR ${responseData ? JSON.stringify(responseData) : response.status}`);
+            }
+
+            window.commandHistory?.addEntry({
+                type: 'SLEEP',
+                success: response.ok,
+                timestamp: new Date(),
+                response: responseData
+            });
+        } catch (error) {
+            this.appendConsole(`SLEEP command error: ${error && error.message ? error.message : String(error)}`);
+        } finally {
+            if (this.btnSleep) {
+                this.btnSleep.disabled = false;
+            }
+        }
     }
 
 }

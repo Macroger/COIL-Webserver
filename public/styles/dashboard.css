@@ -269,6 +269,14 @@ body {
   box-shadow: 0 14px 36px rgba(30,40,60,0.22), 0 3px 12px rgba(0,0,0,0.16);
   transform: translateY(-2px) scale(1.04);
 }
+.btn-connect:disabled, .btn-disconnect:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+  filter: grayscale(0.4);
+  box-shadow: none;
+  pointer-events: none;
+}
 
 /* Clear History button */
 .btn-connect-sim {
@@ -397,6 +405,21 @@ body {
   overflow-y:auto; 
 }
 
+.console-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: middle;
+  letter-spacing: 0.06em;
+  font-family: monospace;
+}
+.console-tag--send { background: #1a4f8a; color: #a8d4ff; }
+.console-tag--recv { background: #1a5c35; color: #90f0b0; }
+.console-tag--info { background: #3a3a3a; color: #aaaaaa; }
+
 .settings-panel { overflow:hidden; transition: max-height 0.28s ease, padding 0.28s ease; max-height:0; padding:0; }
 .settings-panel.visible { max-height:720px; padding:12px 20px; }
 
@@ -438,8 +461,15 @@ button { padding:8px 12px; border-radius:6px; border:none; cursor:pointer; }
 .btn-primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--select-foreground); }
 
 /* Small helpers kept for JS hooks */
-.processing-message { padding:10px; border-left:4px solid #ef4444; display:none; }
-.processing-message.visible { display:block; }
+.processing-message {
+    padding: 6px 10px;
+    border-left: 4px solid #ef4444;
+    min-height: 2.2em;
+    visibility: hidden;
+    font-size: 0.85em;
+    box-sizing: border-box;
+}
+.processing-message.visible { visibility: visible; }
 
 /* keep monospace class used for logs */
 .log-empty { color: var(--text-muted); text-align:center; padding:20px; font-style:italic; }

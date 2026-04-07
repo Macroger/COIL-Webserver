@@ -12,6 +12,7 @@ const ConnectionType = Object.freeze({
 class ConnectionConfig {
     constructor() {
         this.isConnected = false;
+        this.isPending = false;
         this.currentMode = ConnectionType.TCP;
         this.currentIP = 'localhost';
         this.currentPort = 5000;
@@ -89,6 +90,7 @@ class ConnectionConfig {
      * Connect to robot
      */
     async connect() {
+        if (this.isPending) return;
         const ip = this.robotIP.value;
         const port = parseInt(this.robotPort.value);
         const mode = parseInt(this.socketType.value);
@@ -98,24 +100,19 @@ class ConnectionConfig {
             return;
         }
 
-        try {
-            // Log outgoing request
-            const outgoingEntry = {
-                type: 'OUTGOING',
-                timestamp: new Date(),
-                request: { ip, port, mode },
-                message: '/robot/connect request sent',
-                success: null
-            };
-            //window.commandHistory?.addEntry(outgoingEntry);
-            // Also show outgoing connect in raw console
-            window.robotController?.appendConsole(`OUTGOING: /robot/connect -> ${JSON.stringify(outgoingEntry.request)}`);
+        if (this.isConnected && mode === ConnectionType.TCP) {
+            window.robotController?.appendConsole('POST /robot/connect -> REJECTED: already connected (TCP)', 'info');
+            return;
+        }
 
-            const modeStr = mode === ConnectionType.UDP ? 'udp' : mode === ConnectionType.RELAY ? 'relay' : 'tcp';
+        this.isPending = true;
+        const modeStr = mode === ConnectionType.UDP ? 'udp' : mode === ConnectionType.RELAY ? 'relay' : 'tcp';
+        const modeLabel = mode === ConnectionType.TCP ? 'TCP' : mode === ConnectionType.UDP ? 'UDP' : 'Relay';
+        try {
+            window.robotController?.appendConsole(`POST /robot/connect -> sending... (${ip}:${port} via ${modeLabel})`, 'info');
+
             const response = await fetch(`/robot/connect/${encodeURIComponent(ip)}/${port}/${modeStr}`, {
                 method: 'POST'});
-
-            const modeLabel = mode === ConnectionType.TCP ? 'TCP' : mode === ConnectionType.UDP ? 'UDP' : 'Relay';
 
             if (response.ok) {
                 const data = await response.json();
@@ -129,7 +126,7 @@ class ConnectionConfig {
                 this.updateConnectionDisplay();
                 this.startHeartbeatMonitor();
 
-                // Log success
+                window.robotController?.appendConsole(`POST /robot/connect -> OK (Connected to ${ip}:${port} via ${modeLabel})`, 'info');
                 window.commandHistory?.addEntry({
                     type: 'CONNECTION',
                     timestamp: new Date(),
@@ -138,19 +135,16 @@ class ConnectionConfig {
                     message: `Connected to ${ip}:${port} (${modeLabel})`,
                     success: true
                 });
-                // Also show connect success in raw console
-                window.robotController?.appendConsole({ event: 'CONNECT', ok: true, to: `${ip}:${port}`, mode: modeLabel, response: data });
             } 
             else 
             {
-                // Try to capture response body for logging
                 let errText = '';
                 try { errText = await response.text(); } catch (e) { errText = '<unreadable response>'; }
 
                 this.isConnected = false;
                 this.updateConnectionDisplay();
 
-                // Log failure
+                window.robotController?.appendConsole(`POST /robot/connect -> ERR ${response.status}: ${errText}`, 'info');
                 window.commandHistory?.addEntry({
                     type: 'CONNECTION',
                     timestamp: new Date(),
@@ -160,9 +154,6 @@ class ConnectionConfig {
                     success: false
                 });
 
-                // Also show connect failure in raw console
-                window.robotController?.appendConsole({ event: 'CONNECT', ok: false, to: `${ip}:${port}`, mode: modeLabel, response: errText });
-
                 alert('Failed to connect to robot');
             }
         } catch (error) {
@@ -170,7 +161,7 @@ class ConnectionConfig {
             this.isConnected = false;
             this.updateConnectionDisplay();
 
-            // Log exception
+            window.robotController?.appendConsole(`POST /robot/connect -> EXCEPTION: ${error && error.message ? error.message : String(error)}`, 'info');
             window.commandHistory?.addEntry({
                 type: 'CONNECTION',
                 timestamp: new Date(),
@@ -179,10 +170,10 @@ class ConnectionConfig {
                 message: 'Exception while connecting',
                 success: false
             });
-            // Also show exception in raw console
-            window.robotController?.appendConsole({ event: 'CONNECT', ok: false, to: `${ip}:${port}`, mode: modeLabel, error: String(error) });
 
             alert('Error: ' + error.message);
+        } finally {
+            this.isPending = false;
         }
     }
 
@@ -190,7 +181,17 @@ class ConnectionConfig {
      * Disconnect from robot
      */
     async disconnect() {
+        if (this.isPending) return;
+
+        if (!this.isConnected) {
+            const modeLabel = this.currentMode === ConnectionType.TCP ? 'TCP' : this.currentMode === ConnectionType.UDP ? 'UDP' : 'Relay';
+            window.robotController?.appendConsole(`POST /robot/disconnect -> REJECTED: not connected (${modeLabel})`, 'info');
+            return;
+        }
+
+        this.isPending = true;
         try {
+            window.robotController?.appendConsole(`POST /robot/disconnect -> requesting... (${this.currentIP}:${this.currentPort})`, 'info');
             const fetchResp = await fetch('/robot/disconnect', {
                 method: 'POST',
                 headers: {
@@ -205,42 +206,39 @@ class ConnectionConfig {
                 if (ct.includes('application/json')) disconnectData = await fetchResp.json();
             } catch (_) { /* ignore parse errors */ }
 
-            // Log the SLEEP signal result to the raw message console
+            // Log as separate per-packet SEND/RECV pairs to reflect what actually happened
+            const sleepResponse = disconnectData?.sleep_response ?? 'UNKNOWN';
+            const sleepPkt = disconnectData?.sleep_pkt_count ?? '?';
             if (this.sleepSent) {
-                window.robotController?.appendConsole('POST /robot/disconnect -> SLEEP skipped (already sent)');
+                window.robotController?.appendConsole('SLEEP -> skipped (already sent via button)', 'info');
             } else {
-                const sleepResponse = disconnectData?.sleep_response ?? 'UNKNOWN';
-                const sleepPkt = disconnectData?.sleep_pkt_count ?? '?';
-                window.robotController?.appendConsole(`POST /robot/disconnect -> SLEEP pkt #${sleepPkt}: ${sleepResponse}`);
+                window.robotController?.appendConsole(`SLEEP pkt #${sleepPkt} -> sent (server-side)`, 'send');
+                window.robotController?.appendConsole(`SLEEP pkt #${sleepPkt} -> ${sleepResponse}`, 'recv');
+                window.commandHistory?.addEntry({
+                    type: 'SLEEP',
+                    timestamp: new Date(),
+                    success: disconnectData?.sleep_ack === true,
+                    response: sleepResponse
+                });
             }
 
-            // Record the SLEEP command outcome in command history
-            window.commandHistory?.addEntry({
-                type: 'SLEEP',
-                timestamp: new Date(),
-                success: disconnectData?.sleep_ack === true,
-                response: sleepResponse
-            });
-
-            this.isConnected = false;
-            this.lastHeartbeat = null;
-            this.updateConnectionDisplay();
-
-            if (this.udpHeartbeatTimeout) {
-                clearTimeout(this.udpHeartbeatTimeout);
-                this.udpHeartbeatTimeout = null;
-            }
-
+            const connCloseLabel = this.currentMode === ConnectionType.TCP ? 'TCP close' : 'UDP socket close';
+            const disconnectStatus = fetchResp.ok ? 'OK' : `ERR ${fetchResp.status}`;
+            window.robotController?.appendConsole(`${connCloseLabel} -> sent (server-side)`, 'send');
+            window.robotController?.appendConsole(`${connCloseLabel} -> ${disconnectStatus} (${this.currentIP}:${this.currentPort})`, 'recv');
             window.commandHistory?.addEntry({
                 type: 'DISCONNECTION',
                 timestamp: new Date(),
                 response: `Disconnected from ${this.currentIP}:${this.currentPort}`,
-                success: true
+                success: fetchResp.ok
             });
-            // Also show disconnection in raw console
-            window.robotController?.appendConsole({ event: 'DISCONNECT', to: `${this.currentIP}:${this.currentPort}` });
         } catch (error) {
             console.error('Disconnect error:', error);
+        } finally {
+            this.isConnected = false;
+            this.sleepSent = false;
+            this.isPending = false;
+            this.updateConnectionDisplay();
         }
     }
 

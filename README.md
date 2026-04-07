@@ -18,24 +18,58 @@ A modular C++ webserver project for the COIL (Collaborative Online Integrated Le
 - `CMakeLists.txt` — Project build configuration
 - `run-server.sh` — Linux shell script to run the server
 
-## Building
-1. Create and enter the build directory:
-    - `mkdir build`
-    - `cd build`
-2. Generate build files:
-    - `cmake ..`
-3. Build the project:
-    - `cmake --build .`
-4. The executable (`COIL_WEBSERVER` or `COIL_WEBSERVER.exe`) will be in the project root.
+## Docker (recommended)
+The Dockerfile handles all dependencies automatically — no manual setup required.
 
-## Running
-- On Linux: `./COIL_WEBSERVER`
-- Or use `run-server.sh` (Linux only)
+```bash
+docker build -t coil-webserver .
+docker run -p 30333:30333 coil-webserver
+```
 
-## Requirements
-- C++20 compatible compiler (GCC, Clang, MSVC)
+The container clones Crow, ASIO, and cpp-httplib at build time, installs Boost via apt, then compiles and runs the server.
+
+## Local Build
+
+### Installing Dependencies
+Before building locally for the first time, run the install script from the project root to fetch external libraries into `external/`:
+
+```bash
+./install_scripts/install_deps.sh
+```
+
+This clones Crow, ASIO, and cpp-httplib into `external/`, and installs Boost (via apt if running as root, or builds it locally as a fallback). Individual components can be skipped:
+
+```bash
+./install_scripts/install_deps.sh --no-boost      # skip Boost (if already installed system-wide)
+./install_scripts/install_deps.sh --no-asio        # skip ASIO
+./install_scripts/install_deps.sh --no-crow        # skip Crow
+./install_scripts/install_deps.sh --boost-version 1.85.0  # specify a Boost version
+```
+
+### Building
+Use the provided rebuild script from the project root:
+
+```bash
+./rebuild-server.sh            # incremental build (fast, preserves build/)
+./rebuild-server.sh --full     # clean rebuild (removes build/ and reconfigures)
+JOBS=4 ./rebuild-server.sh     # override parallel job count
+```
+
+The executable (`COIL_WEBSERVER`) will be placed in the project root after a successful build.
+
+Alternatively, build manually:
+1. `cmake -B build -S .`
+2. `cmake --build build`
+
+### Running
+```bash
+./COIL_WEBSERVER
+```
+
+### Requirements
+- C++20 compatible compiler (GCC 11+ or Clang 14+ recommended)
 - CMake 3.20+
-- Boost (system, filesystem)
+- Boost (system, filesystem) — installed via `install_deps.sh` or system package manager
 - Threads library
 
 ## License

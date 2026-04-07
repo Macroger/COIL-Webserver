@@ -20,10 +20,10 @@ WORKDIR /app
 # Copy the project source into the container
 COPY . .
 
-# Crow is a header-only library expected at external/crow/include.
-# It is gitignored so we clone it here before building.
-# ASIO is fetched automatically by CMake FetchContent during configure.
+# Clone all header-only / source dependencies into external/ before building.
+# Crow and ASIO are gitignored; httplib is also cloned here for relay mode.
 RUN git clone --depth 1 https://github.com/CrowCpp/Crow.git external/crow
+RUN git clone --depth 1 https://github.com/chriskohlhoff/asio.git external/asio
 RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git external/httplib
 
 # Configure and build the project

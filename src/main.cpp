@@ -484,7 +484,7 @@ int main()
 
 	// POST /robot/connect - Configure and connect to robot or relay server
 	CROW_ROUTE(app, "/robot/connect/<string>/<int>/<string>").methods("POST"_method)
-	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
 	{
 		// Relay mode: store PC3 address, verify it is reachable, skip socket setup
 		if (modeStr == "relay")
@@ -501,6 +501,7 @@ int main()
 				relayHost = ip;
 				relayPort = port;
 				socketMgr = nullptr;
+				pktCounter = 0;
 
 				response["status"]    = "success";
 				response["message"]   = "Relay connected to " + ip + ":" + std::to_string(port);
@@ -543,6 +544,8 @@ int main()
 
 			if (connType == coil::protocol::ConnectionType::TCP)
 				socketMgr->ConnectTCP();
+
+			pktCounter = 0;
 
 			auto response = crow::json::wvalue();
 			response["status"]    = "success";
@@ -653,7 +656,10 @@ int main()
 					response["sleep_pkt_count"] = pktCounter;
 				}
 
-				socketMgr->DisconnectTCP();
+				if (socketMgr->GetConnectionType() == coil::protocol::ConnectionType::UDP)
+					socketMgr->InvalidateSockets();
+				else
+					socketMgr->DisconnectTCP();
 			}
 			else 
 			{

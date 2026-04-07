@@ -143,10 +143,10 @@ class RobotController {
         } else {
             if (!this.pendingCommand) {
                 this.pendingCommand = cmd;
-                this.appendConsole(`Queued one command: ${cmd.type} ${cmd.direction || ''}`);
+                this.appendConsole(`Queued one command: ${cmd.type} ${cmd.direction || ''}`, 'info');
                 this.updatePendingDisplay();
             } else {
-                this.appendConsole('Already have one queued command; ignoring additional presses.');
+                this.appendConsole('Already have one queued command; ignoring additional presses.', 'info');
             }
         }
     }
@@ -156,7 +156,10 @@ class RobotController {
         this.pendingCommand = this.pendingCommand || null; // keep existing pending slot
         this.updatePendingDisplay();
         this.disableControlsForCommand(cmd);
-        this.appendConsole(`Sending command: ${JSON.stringify(cmd)}`);
+        const cmdLabel = cmd.type === 'TURN'
+            ? `TURN ${(cmd.direction || '').toUpperCase()} — duration: ${cmd.duration}s`
+            : `MOVE ${(cmd.direction || '').toUpperCase()} — duration: ${cmd.duration}s, power: ${cmd.power}%`;
+        this.appendConsole(`DRIVE pkt -> ${cmdLabel}`, 'send');
 
         // Determine endpoint
         const endpoint = '/robot/telecommand';
@@ -193,9 +196,9 @@ class RobotController {
             if (response.ok) {
                 const simResponse = responseData?.sim_response || 'UNKNOWN';
                 const pktNum = responseData?.packet_count ?? '?';
-                this.appendConsole(`PUT ${endpoint} -> ${simResponse} (pkt #${pktNum})`);
+                this.appendConsole(`DRIVE pkt #${pktNum} -> ${simResponse}`, 'recv');
             } else {
-                this.appendConsole(`PUT ${endpoint} -> ERR ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`);
+                this.appendConsole(`DRIVE pkt -> ERR ${responseData ? JSON.stringify(responseData) : (responseText || response.statusText || response.status)}`, 'recv');
             }
 
             const ack = response.ok && (responseData?.ack === true);
@@ -208,15 +211,13 @@ class RobotController {
 
             this.setConnectionStatus(response.ok);
         } catch (error) {
-            this.appendConsole(error);
+            this.appendConsole(error, 'info');
             window.commandHistory?.addEntry({ type: cmd.type, command: cmd, response: (error && (error.stack || error.message)) || String(error), success: false, timestamp: new Date() });
             this.setConnectionStatus(false);
         }
 
         // Keep UI disabled for duration + 250ms as requested
         const waitMs = Math.round((cmd.duration || 0) * 1000) + 250;
-        this.appendConsole(`Waiting ${waitMs}ms for command completion (UI locked)`);
-
         // Show countdown in processing message
         if (this.processingMessage) {
             let remaining = waitMs;
@@ -255,7 +256,6 @@ class RobotController {
         if (this.arrowPad) this.arrowPad.classList.add('processing');
         if (this.processingMessage) {
             this.processingMessage.textContent = `Please wait, processing command (${cmd.type})...`;
-            this.processingMessage.classList.remove('hidden');
             this.processingMessage.classList.add('visible');
             this.processingMessage.setAttribute('aria-busy', 'true');
         }
@@ -269,7 +269,6 @@ class RobotController {
         if (this.arrowPad) this.arrowPad.classList.remove('processing');
         if (this.processingMessage) {
             this.processingMessage.classList.remove('visible');
-            this.processingMessage.classList.add('hidden');
             this.processingMessage.removeAttribute('aria-busy');
         }
     }
@@ -319,13 +318,24 @@ class RobotController {
             this.btnStatus.classList.add('loading');
             this.btnStatus.setAttribute('aria-busy', 'true');
         }
-        this.appendConsole('GET /robot/telemetry_request -> sending...');
+        this.appendConsole('TELEMETRY REQUEST pkt -> requesting robot state', 'send');
         try {
             const response = await fetch('/robot/telemetry_request', { method: 'GET' });
             if (response.ok) 
             {
                 const body = await response.json().catch(() => null);
-                this.appendConsole(`GET /robot/telemetry_request -> ${JSON.stringify(body)}`);
+                const t = body?.telemetry;
+                const pktNum = t?.last_packet_counter ?? '?';
+                const lastCmd = t?.last_command
+                    ? `${t.last_command} (val: ${t?.last_command_value ?? '—'}, pwr: ${t?.last_command_power ?? '—'}%)`
+                    : '—';
+                const summary = [
+                    `heading: ${t?.heading ?? '—'}°`,
+                    `grade: ${t?.current_grade ?? '—'}`,
+                    `hits: ${t?.hit_count ?? '—'}`,
+                    `last cmd: ${lastCmd}`
+                ].join('  |  ');
+                this.appendConsole(`TELEMETRY pkt #${pktNum} -> ${summary}`, 'recv');
                 this.updateStatusDisplay(body?.telemetry);
                 this.setConnectionStatus(true);
                 window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: true });
@@ -340,12 +350,12 @@ class RobotController {
                 } catch (e) {
                     respBody = `(<failed to read body> ${e && e.message ? e.message : String(e)})`;
                 }
-                this.appendConsole(`Status request failed: ${typeof respBody === 'string' ? respBody : JSON.stringify(respBody)}`);
+                this.appendConsole(`Status request failed: ${typeof respBody === 'string' ? respBody : JSON.stringify(respBody)}`, 'recv');
                 this.setConnectionStatus(false);
                 window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
             }
         } catch (error) {
-            this.appendConsole(error);
+            this.appendConsole(error, 'info');
             this.setConnectionStatus(false);
             window.commandHistory?.addEntry({ type: 'STATUS_REQUEST', success: false });
         } finally {
@@ -357,8 +367,19 @@ class RobotController {
         }
     }
 
+    resetStatusDisplay() {
+        const dash = '—';
+        if (this.lastPktCounter)    this.lastPktCounter.textContent    = dash;
+        if (this.currentGrade)      this.currentGrade.textContent      = dash;
+        if (this.hitCount)          this.hitCount.textContent          = dash;
+        if (this.heading)           this.heading.textContent           = dash;
+        if (this.lastCommandElem)   this.lastCommandElem.textContent   = dash;
+        if (this.lastCommandValue)  this.lastCommandValue.textContent  = dash;
+        if (this.lastCommandPower)  this.lastCommandPower.textContent  = dash;
+        if (this.lastUpdate)        this.lastUpdate.textContent        = dash;
+    }
+
     updateStatusDisplay(status) {
-        if (!status) return;
         if (status.last_packet_counter !== undefined && this.lastPktCounter) this.lastPktCounter.textContent = status.last_packet_counter;
         if (status.current_grade !== undefined && this.currentGrade) this.currentGrade.textContent = status.current_grade;
         if (status.hit_count !== undefined && this.hitCount) this.hitCount.textContent = status.hit_count;
@@ -405,6 +426,9 @@ class RobotController {
     }
 
     setConnectionStatus(connected) {
+        if (connected && window.connectionConfig) {
+            window.connectionConfig.onTelemetryReceived();
+        }
         if (this.statusIndicator && this.statusText) {
             if (connected) {
                 this.statusIndicator.classList.remove('disconnected');
@@ -421,7 +445,7 @@ class RobotController {
         if (connCard) { const v = connCard.querySelector('.value'); if (v) v.textContent = connected ? 'Connected' : 'Disconnected'; }
     }
 
-    appendConsole(msg) {
+    appendConsole(msg, direction = 'info') {
         if (!this.commConsole) return;
         const pre = document.createElement('pre');
         pre.className = 'console-line';
@@ -444,7 +468,11 @@ class RobotController {
         } else {
             text = String(msg);
         }
-        pre.textContent = text;
+        const badge = document.createElement('span');
+        badge.className = `console-tag console-tag--${direction}`;
+        badge.textContent = direction === 'send' ? 'SEND' : direction === 'recv' ? 'RECV' : 'INFO';
+        pre.appendChild(badge);
+        pre.appendChild(document.createTextNode(' ' + text));
         this.commConsole.appendChild(pre);
         if (this.autoScroll && this.autoScroll.checked) {
             this.commConsole.scrollTop = this.commConsole.scrollHeight;
@@ -477,7 +505,7 @@ class RobotController {
         if (this.btnSleep) {
             this.btnSleep.disabled = true;
         }
-        this.appendConsole('PUT /robot/telecommand (SLEEP) -> sending...');
+        this.appendConsole('PUT /robot/telecommand (SLEEP) -> sending...', 'send');
         try {
             const response = await fetch('/robot/telecommand', {
                 method: 'PUT',
@@ -494,10 +522,28 @@ class RobotController {
             if (response.ok) {
                 const pktNum = responseData?.packet_count ?? '?';
                 const simResponse = responseData?.sim_response || 'UNKNOWN';
-                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ${simResponse} (pkt #${pktNum})`);
-                if (window.connectionConfig) window.connectionConfig.sleepSent = true;
+                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ${simResponse} (pkt #${pktNum})`, 'recv');
+                this.resetStatusDisplay();
+                if (window.connectionConfig) {
+                    window.connectionConfig.sleepSent = true;
+                    if (window.connectionConfig.currentMode === ConnectionType.TCP) {
+                        // TCP: server still has an open socket — close it cleanly.
+                        this.appendConsole('Robot sleeping — closing TCP connection...', 'info');
+                        window.connectionConfig.disconnect();
+                    } else {
+                        // UDP: no persistent connection to close — just mark disconnected locally.
+                        window.connectionConfig.isConnected = false;
+                        window.connectionConfig.lastHeartbeat = null;
+                        if (window.connectionConfig.udpHeartbeatTimeout) {
+                            clearTimeout(window.connectionConfig.udpHeartbeatTimeout);
+                            window.connectionConfig.udpHeartbeatTimeout = null;
+                        }
+                        window.connectionConfig.updateConnectionDisplay();
+                        this.appendConsole('Robot sleeping — UDP connection marked closed', 'info');
+                    }
+                }
             } else {
-                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ERR ${responseData ? JSON.stringify(responseData) : response.status}`);
+                this.appendConsole(`PUT /robot/telecommand (SLEEP) -> ERR ${responseData ? JSON.stringify(responseData) : response.status}`, 'recv');
             }
 
             window.commandHistory?.addEntry({
@@ -507,7 +553,7 @@ class RobotController {
                 response: responseData?.sim_response || 'UNKNOWN'
             });
         } catch (error) {
-            this.appendConsole(`SLEEP command error: ${error && error.message ? error.message : String(error)}`);
+            this.appendConsole(`SLEEP command error: ${error && error.message ? error.message : String(error)}`, 'info');
         } finally {
             if (this.btnSleep) {
                 setTimeout(() => {

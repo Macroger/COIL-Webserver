@@ -853,6 +853,11 @@
 }
 
 /* --------------- arrow pad --------------- */
+[data-theme="sammy"] .arrow-pad {
+  background: linear-gradient(135deg, rgba(180, 100, 40, 0.18) 0%, rgba(140, 70, 20, 0.26) 100%);
+  border: 1px solid rgba(200, 135, 74, 0.40);
+  box-shadow: 0 6px 20px rgba(140, 80, 20, 0.12), inset 0 1px 0 rgba(255, 220, 160, 0.12);
+}
 [data-theme="sammy"] .arrow-btn {
   background: linear-gradient(135deg, #fef9f0 0%, #f0dcc0 100%);
   border: 1.5px solid #d4b080;
@@ -939,10 +944,4 @@
   color: #b0845a;
   letter-spacing: 0.06em;
   opacity: 0.7;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  z-index: 9999;
 }

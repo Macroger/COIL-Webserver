@@ -41,6 +41,17 @@ else
 	echo "Performing incremental build (preserves build/). Use --full to force clean rebuild."
 fi
 
+# Ensure external dependencies are present; install them if any are missing.
+MISSING_DEPS=0
+[[ ! -d external/asio ]]   && MISSING_DEPS=1
+[[ ! -d external/crow ]]   && MISSING_DEPS=1
+[[ ! -d external/httplib ]] && MISSING_DEPS=1
+
+if [[ $MISSING_DEPS -eq 1 ]]; then
+	echo "One or more dependencies missing in external/ — running install_deps.sh..."
+	bash install_scripts/install_deps.sh --no-boost
+fi
+
 # Configure the project into the build directory
 cmake -B build -S .
 

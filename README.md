@@ -31,13 +31,23 @@ The container clones Crow, ASIO, and cpp-httplib at build time, installs Boost v
 ## Local Build
 
 ### Installing Dependencies
-Before building locally for the first time, run the install script from the project root to fetch external libraries into `external/`:
+Before building locally for the first time, run the install script from the project root:
 
 ```bash
 ./install_scripts/install_deps.sh
 ```
 
-This clones Crow, ASIO, and cpp-httplib into `external/`, and installs Boost (via apt if running as root, or builds it locally as a fallback). Individual components can be skipped:
+The script installs everything the project needs to build:
+
+| Dependency | What the script does |
+|---|---|
+| **Crow** | Clones `CrowCpp/Crow` into `external/crow` |
+| **ASIO** | Clones `chriskohlhoff/asio` into `external/asio` |
+| **cpp-httplib** | Clones `yhirose/cpp-httplib` into `external/httplib` |
+| **Boost** | Installs via apt (as root) or builds locally from source into `external/boost` |
+| **CMake 3.20+** | Checks installed version; installs via apt or Kitware's official installer if missing/outdated |
+
+Individual components can be skipped:
 
 ```bash
 ./install_scripts/install_deps.sh --no-boost      # skip Boost (if already installed system-wide)
@@ -66,15 +76,4 @@ Alternatively, build manually:
 ./COIL_WEBSERVER
 ```
 
-### Requirements
-- C++20 compatible compiler (GCC 11+ or Clang 14+ recommended)
-- CMake 3.20+
-- Boost (system, filesystem) — installed via `install_deps.sh` or system package manager
-- Threads library
 
-## License
-This project is provided under the MIT License. See LICENSE for details.
-
-## Credits
-- [Crow](https://github.com/CrowCpp/crow)
-- [ASIO](https://think-async.com/)

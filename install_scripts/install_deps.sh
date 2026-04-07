@@ -225,6 +225,77 @@ else
 fi
 echo "cpp-httplib ready (external/httplib/include)."
 
+###############################################################################
+# CMake (minimum 3.20 required by CMakeLists.txt)
+###############################################################################
+CMAKE_MIN_MAJOR=3
+CMAKE_MIN_MINOR=20
+
+echo "==> Checking CMake version (need >= ${CMAKE_MIN_MAJOR}.${CMAKE_MIN_MINOR})"
+
+cmake_meets_min() {
+  if ! have_cmd cmake; then return 1; fi
+  local ver
+  ver=$(cmake --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+' | head -1)
+  [[ -z "$ver" ]] && return 1
+  local maj min
+  maj=$(echo "$ver" | cut -d. -f1)
+  min=$(echo "$ver" | cut -d. -f2)
+  [[ "$maj" -gt "$CMAKE_MIN_MAJOR" || ( "$maj" -eq "$CMAKE_MIN_MAJOR" && "$min" -ge "$CMAKE_MIN_MINOR" ) ]]
+}
+
+if cmake_meets_min; then
+  echo "CMake $(cmake --version | head -1 | grep -oP '\d+\.\d+\.\d+') is sufficient, skipping install."
+else
+  echo "CMake not found or below ${CMAKE_MIN_MAJOR}.${CMAKE_MIN_MINOR} — attempting to install"
+  INSTALLED=0
+
+  # Prefer apt (Debian/Ubuntu) — use Kitware's apt repo for a recent version
+  if have_cmd apt-get && [[ $(id -u) -eq 0 ]]; then
+    apt-get update
+    apt-get install -y --no-install-recommends cmake || true
+    if cmake_meets_min; then
+      echo "CMake installed via apt."
+      INSTALLED=1
+    else
+      echo "apt cmake is too old; falling back to Kitware's official installer."
+    fi
+  fi
+
+  # Fallback: Kitware's official cmake-install script (works on Linux x86_64/aarch64)
+  if [[ $INSTALLED -eq 0 ]]; then
+    ARCH=$(uname -m)
+    CMAKE_INSTALL_VER="3.29.6"
+    case "$ARCH" in
+      x86_64)  CMAKE_SCRIPT="cmake-${CMAKE_INSTALL_VER}-linux-x86_64.sh" ;;
+      aarch64) CMAKE_SCRIPT="cmake-${CMAKE_INSTALL_VER}-linux-aarch64.sh" ;;
+      *)
+        echo "ERROR: Unsupported architecture '$ARCH'. Please install CMake ${CMAKE_MIN_MAJOR}.${CMAKE_MIN_MINOR}+ manually." >&2
+        exit 11
+        ;;
+    esac
+    CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v${CMAKE_INSTALL_VER}/${CMAKE_SCRIPT}"
+    TMPDIR=$(mktemp -d)
+    trap 'rm -rf "$TMPDIR"' RETURN
+    echo "Downloading CMake ${CMAKE_INSTALL_VER} from ${CMAKE_URL}"
+    if have_cmd curl; then
+      curl -L -o "$TMPDIR/$CMAKE_SCRIPT" "$CMAKE_URL"
+    else
+      wget -qO "$TMPDIR/$CMAKE_SCRIPT" "$CMAKE_URL"
+    fi
+    chmod +x "$TMPDIR/$CMAKE_SCRIPT"
+    "$TMPDIR/$CMAKE_SCRIPT" --skip-license --prefix=/usr/local
+    echo "CMake ${CMAKE_INSTALL_VER} installed to /usr/local."
+    INSTALLED=1
+  fi
+
+  if ! cmake_meets_min; then
+    echo "ERROR: CMake installation failed or version still below ${CMAKE_MIN_MAJOR}.${CMAKE_MIN_MINOR}." >&2
+    echo "Please install CMake manually: https://cmake.org/download/" >&2
+    exit 12
+  fi
+fi
+
 echo "All requested dependencies are installed under external/"
 echo "You can now run: cmake -S . -B build && cmake --build build -- -j$(nproc)"
 

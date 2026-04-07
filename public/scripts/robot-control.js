@@ -504,13 +504,15 @@ class RobotController {
                 type: 'SLEEP',
                 success: response.ok,
                 timestamp: new Date(),
-                response: responseData
+                response: responseData?.sim_response || 'UNKNOWN'
             });
         } catch (error) {
             this.appendConsole(`SLEEP command error: ${error && error.message ? error.message : String(error)}`);
         } finally {
             if (this.btnSleep) {
-                this.btnSleep.disabled = false;
+                setTimeout(() => {
+                    if (this.btnSleep) this.btnSleep.disabled = false;
+                }, 1000);
             }
         }
     }

@@ -34,7 +34,11 @@ USER coiluser
 # Crow and ASIO are gitignored; httplib is also cloned here for relay mode.
 RUN git clone --depth 1 https://github.com/CrowCpp/Crow.git external/crow
 RUN git clone --depth 1 https://github.com/chriskohlhoff/asio.git external/asio
-RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git external/httplib
+# cpp-httplib puts httplib.h at the repo root; mirror the vendored layout expected by CMakeLists.txt
+RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git /tmp/cpp-httplib \
+    && mkdir -p external/httplib/include \
+    && cp /tmp/cpp-httplib/httplib.h external/httplib/include/httplib.h \
+    && rm -rf /tmp/cpp-httplib
 
 # Configure and build the project
 # The binary is placed in /app/ by RUNTIME_OUTPUT_DIRECTORY in CMakeLists.txt

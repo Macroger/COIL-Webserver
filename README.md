@@ -44,3 +44,6 @@ This project is provided under the MIT License. See LICENSE for details.
 ## Credits
 - [Crow](https://github.com/CrowCpp/crow)
 - [ASIO](https://think-async.com/)
+
+## Contributors
+Ryan Hackbart

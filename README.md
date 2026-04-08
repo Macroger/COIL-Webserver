@@ -47,3 +47,6 @@ This project is provided under the MIT License. See LICENSE for details.
 
 ## Contributors
 Ryan Hackbart
+Matt Schatz
+Leanne Kidder
+Hayden Puthenparambil Biju

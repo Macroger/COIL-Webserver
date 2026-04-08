@@ -1,5 +1,5 @@
 /* Google Fonts for themed typography */
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Creepster&family=Bebas+Neue&family=Roboto+Condensed:wght@400;700&family=Share+Tech+Mono&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Creepster&family=Bebas+Neue&family=Roboto+Condensed:wght@400;700&family=Share+Tech+Mono&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Quicksand:wght@400;500;600;700&display=swap');
 
 /* Theme presets override CSS variables based on [data-theme] attribute on <html> */
 
@@ -13,6 +13,19 @@
   --theme-dashboard-card-top: #91bcc943;
   --theme-dashboard-card-bottom: #4f95b7;
   --theme-surface-bg: #162b41;
+}
+
+/* Cobalt Command (default) — sleep button needs contrast against the blue background */
+:root:not([data-theme]) .btn-sleep {
+  background: linear-gradient(135deg, #0f2a4a 0%, #1a3a5c 100%);
+  color: #e0f0ff;
+  border: 1.5px solid #3a7abf;
+  box-shadow: 0 4px 16px rgba(10, 30, 70, 0.35);
+}
+:root:not([data-theme]) .btn-sleep:hover {
+  background: linear-gradient(135deg, #1a3a5c 0%, #1e5fa8 100%);
+  filter: none;
+  box-shadow: 0 8px 24px rgba(10, 30, 70, 0.45);
 }
 
 /* Angelic - light, pastel, airy */
@@ -255,10 +268,16 @@
   background: linear-gradient(135deg, #fce7f3 0%, #fff1f2 100%);
   box-shadow: 0 8px 24px rgba(251, 113, 133, 0.3);
 }
-[data-theme="angelic"] .btn-clear-history {
+[data-theme="angelic"] .btn-clear-history,
+[data-theme="angelic"] .btn-sleep {
   background: linear-gradient(135deg, #f0f4ff 0%, #ede9fe 100%);
   color: #4338ca;
   border: 1.5px solid #c7b8ff;
+}
+[data-theme="angelic"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #ede9fe 0%, #dbeafe 100%);
+  filter: none;
+  box-shadow: 0 8px 22px rgba(199, 184, 255, 0.35);
 }
 [data-theme="angelic"] .arrow-btn {
   background: linear-gradient(135deg, #f0f9ff 0%, #fdf4ff 100%);
@@ -324,11 +343,18 @@
   border: 1.5px solid #7a0020;
   box-shadow: 0 4px 18px rgba(120, 0, 30, 0.3);
 }
-[data-theme="demonic"] .btn-clear-history {
+[data-theme="demonic"] .btn-clear-history,
+[data-theme="demonic"] .btn-sleep {
   background: linear-gradient(135deg, #2a0008 0%, #1a0005 100%);
   border: 1.5px solid #ff2444;
   color: #ff9999;
   text-shadow: 0 0 6px rgba(255, 36, 68, 0.5);
+}
+[data-theme="demonic"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #ff2444 0%, #4a0008 100%);
+  color: #fff;
+  filter: none;
+  box-shadow: 0 0 24px rgba(255, 36, 68, 0.5), 0 0 10px rgba(255, 0, 0, 0.3);
 }
 [data-theme="demonic"] .arrow-btn {
   background: linear-gradient(135deg, #1a0308 0%, #0a0105 100%);
@@ -404,12 +430,18 @@
   transform: translate(1px, 1px) !important;
   box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
 }
-[data-theme="industrial"] .btn-clear-history {
+[data-theme="industrial"] .btn-clear-history,
+[data-theme="industrial"] .btn-sleep {
   border-radius: 4px;
   border: 2px solid #6b7280;
   box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+[data-theme="industrial"] .btn-sleep:hover {
+  filter: none;
+  transform: translate(1px, 1px) !important;
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.35);
 }
 [data-theme="industrial"] .arrow-btn {
   border-radius: 4px;
@@ -495,12 +527,18 @@
   color: #fff;
   box-shadow: 0 0 28px rgba(255, 45, 149, 0.55);
 }
-[data-theme="cyberpunk"] .btn-clear-history {
+[data-theme="cyberpunk"] .btn-clear-history,
+[data-theme="cyberpunk"] .btn-sleep {
   background: linear-gradient(135deg, #000a14 0%, #001a24 100%);
   border: 1.5px solid #00e5ff;
   color: #00e5ff;
   box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
   text-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+}
+[data-theme="cyberpunk"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #001a24 0%, #000a14 100%);
+  filter: none;
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.5), inset 0 0 10px rgba(0, 229, 255, 0.08);
 }
 [data-theme="cyberpunk"] .arrow-btn {
   background: linear-gradient(135deg, #0a0014 0%, #050010 100%);
@@ -579,10 +617,16 @@
   color: #fff;
   box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
 }
-[data-theme="coolgray"] .btn-clear-history {
+[data-theme="coolgray"] .btn-clear-history,
+[data-theme="coolgray"] .btn-sleep {
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
   border: 1.5px solid #cbd5e1;
   color: #475569;
+}
+[data-theme="coolgray"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f1f5f9 100%);
+  filter: none;
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.18);
 }
 [data-theme="coolgray"] .arrow-btn {
   background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
@@ -647,10 +691,16 @@
   color: #fdf5e8;
   box-shadow: 0 8px 24px rgba(192, 57, 43, 0.3);
 }
-[data-theme="warmcream"] .btn-clear-history {
+[data-theme="warmcream"] .btn-clear-history,
+[data-theme="warmcream"] .btn-sleep {
   background: linear-gradient(135deg, #ede0cc 0%, #f5ede0 100%);
   border: 1.5px solid #c49a6c;
   color: #6b3f1a;
+}
+[data-theme="warmcream"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #e0d0b8 0%, #ede0cc 100%);
+  filter: none;
+  box-shadow: 0 8px 22px rgba(100, 60, 20, 0.18);
 }
 [data-theme="warmcream"] .arrow-btn {
   background: linear-gradient(135deg, #fdf8f0 0%, #f0e4d0 100%);
@@ -676,4 +726,222 @@
   background: linear-gradient(135deg, #c07838 0%, #8a5020 100%);
   color: #fdf5e8;
   box-shadow: 0 6px 24px rgba(120, 70, 20, 0.28);
+}
+
+/* ===========================================================
+   SAMMY'S THEME
+   In loving memory of Sam — a gentle ginger soul with
+   emerald eyes, warm fur, and an even warmer heart.  🐾
+   Colours drawn from his beautiful coat: sun-warmed
+   ginger, soft peach, creamy gold, and his striking
+   green eyes.
+   =========================================================== */
+
+/* --------------- CSS variables --------------- */
+:root[data-theme="sammy"] {
+  --bg-top: #fdf6ec;
+  --bg-bottom: #f5e6ce;
+  --header-top: #d4935a;
+  --header-bottom: #c07838;
+  --header-border: #c8874a;
+  --accent: #c87533;        /* rich ginger, Sam's deepest fur tone */
+  --accent-2: #5a9e64;      /* Sam's green eyes                   */
+  --accent-border: rgba(200, 117, 51, 0.18);
+  --card-bg: #fdf8f0;
+  --theme-dashboard-card-top: #fff8ee;
+  --theme-dashboard-card-bottom: #f5e6ce;
+  --theme-panel-bg: #fef9f0;
+  --theme-panel-top: #fef9f0;
+  --theme-panel-bottom: #f0dcc0;
+  --theme-panel-border: rgba(200, 135, 74, 0.30);
+  --theme-panel-shadow: 0 6px 22px rgba(140, 80, 20, 0.09);
+  --text-primary: #3a2210;
+  --text-muted: #8c6a46;
+  --success: #5a9e64;       /* Sam's green-eyed gaze */
+  --danger: #c45030;
+  --warning: #e8a020;
+  --console-bg: #1a0e04;
+  --console-text: #f0d4a0;
+  --select-foreground: var(--text-primary);
+  --select-bg: rgba(0,0,0,0.06);
+  --card-border: #d4b080;
+}
+
+/* --------------- typography --------------- */
+[data-theme="sammy"] body {
+  font-family: 'Quicksand', 'Segoe UI', Tahoma, sans-serif;
+}
+[data-theme="sammy"] h1,
+[data-theme="sammy"] h2,
+[data-theme="sammy"] h3 {
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+  font-weight: 700;
+  color: #7a4420;
+  letter-spacing: 0.02em;
+}
+[data-theme="sammy"] h1 {
+  font-size: 28px;
+}
+
+/* --------------- header --------------- */
+[data-theme="sammy"] .dashboard-header {
+  border-bottom: 2px solid #d4955e;
+  box-shadow: 0 4px 22px rgba(180, 100, 40, 0.14), 0 2px 8px rgba(90, 50, 10, 0.06);
+}
+
+/* --------------- paw-print watermark --------------- */
+/* A subtle, repeating paw-print pattern in the page background using
+   a pure-CSS radial-gradient so no external images are needed. */
+[data-theme="sammy"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.032;
+  background-image:
+    /* main pad */
+    radial-gradient(ellipse 18px 20px at 50px 60px, #7a4420 100%, transparent 100%),
+    /* top-left toe */
+    radial-gradient(circle 7px at 34px 38px, #7a4420 100%, transparent 100%),
+    /* top-right toe */
+    radial-gradient(circle 7px at 66px 38px, #7a4420 100%, transparent 100%),
+    /* bottom-left toe */
+    radial-gradient(circle 6px at 30px 50px, #7a4420 100%, transparent 100%),
+    /* bottom-right toe */
+    radial-gradient(circle 6px at 70px 50px, #7a4420 100%, transparent 100%);
+  background-size: 140px 140px;
+  background-repeat: repeat;
+}
+
+/* --------------- buttons --------------- */
+[data-theme="sammy"] .btn-connect,
+[data-theme="sammy"] .btn-status {
+  background: linear-gradient(135deg, #c87533 0%, #a05e28 100%);
+  border: 1.5px solid #d49050;
+  color: #fdf5e6;
+  box-shadow: 0 6px 20px rgba(180, 100, 40, 0.24);
+  text-shadow: 0 1px 2px rgba(60, 30, 0, 0.3);
+}
+[data-theme="sammy"] .btn-connect:hover,
+[data-theme="sammy"] .btn-status:hover {
+  background: linear-gradient(135deg, #e89040 0%, #c87533 100%);
+  box-shadow: 0 10px 30px rgba(200, 117, 51, 0.38);
+}
+[data-theme="sammy"] .btn-disconnect {
+  background: linear-gradient(135deg, #fef6ea 0%, #f5e6ce 100%);
+  border: 1.5px solid #c45030;
+  color: #c45030;
+  box-shadow: 0 4px 14px rgba(196, 80, 48, 0.14);
+}
+[data-theme="sammy"] .btn-disconnect:hover {
+  background: linear-gradient(135deg, #c45030 0%, #a03820 100%);
+  color: #fdf5e6;
+  box-shadow: 0 8px 24px rgba(196, 80, 48, 0.32);
+}
+[data-theme="sammy"] .btn-clear-history,
+[data-theme="sammy"] .btn-sleep {
+  background: linear-gradient(135deg, #f0dcc0 0%, #f5e6ce 100%);
+  border: 1.5px solid #c8874a;
+  color: #6b3f1a;
+  box-shadow: 0 4px 14px rgba(140, 80, 20, 0.12);
+}
+[data-theme="sammy"] .btn-sleep:hover {
+  background: linear-gradient(135deg, #e8d0a8 0%, #f0dcc0 100%);
+  filter: none;
+  box-shadow: 0 8px 22px rgba(140, 80, 20, 0.20);
+}
+
+/* --------------- arrow pad --------------- */
+[data-theme="sammy"] .arrow-pad {
+  background: linear-gradient(135deg, rgba(180, 100, 40, 0.18) 0%, rgba(140, 70, 20, 0.26) 100%);
+  border: 1px solid rgba(200, 135, 74, 0.40);
+  box-shadow: 0 6px 20px rgba(140, 80, 20, 0.12), inset 0 1px 0 rgba(255, 220, 160, 0.12);
+}
+[data-theme="sammy"] .arrow-btn {
+  background: linear-gradient(135deg, #fef9f0 0%, #f0dcc0 100%);
+  border: 1.5px solid #d4b080;
+  color: #6b3f1a;
+  box-shadow: 0 2px 8px rgba(140, 80, 20, 0.10);
+  transition: all 0.18s ease;
+}
+[data-theme="sammy"] .arrow-btn:hover {
+  background: linear-gradient(135deg, #c87533 0%, #a05e28 100%);
+  color: #fdf5e6;
+  border-color: #c87533;
+  box-shadow: 0 8px 24px rgba(200, 117, 51, 0.30);
+}
+
+/* --------------- command log & cards --------------- */
+[data-theme="sammy"] .command-log {
+  background: linear-gradient(180deg, #fef9f0 0%, #f5e6ce 100%);
+  border: 1px solid #d4b080;
+}
+[data-theme="sammy"] .status-small-card {
+  border: 1.5px solid #d4b080;
+  box-shadow: 0 2px 12px rgba(140, 80, 20, 0.09);
+}
+[data-theme="sammy"] .telemetry-card {
+  border: 1.5px solid #d4b080;
+  box-shadow: 0 3px 14px rgba(180, 100, 40, 0.10);
+}
+
+/* --------------- goto-latest button --------------- */
+[data-theme="sammy"] .goto-latest {
+  background: linear-gradient(135deg, #c87533 0%, #a05e28 100%);
+  color: #fdf5e6;
+  box-shadow: 0 6px 24px rgba(200, 117, 51, 0.32);
+}
+
+/* --------------- console / comm panel --------------- */
+[data-theme="sammy"] .comm-console {
+  color: #f0d4a0;
+}
+
+/* --------------- connect-sim button --------------- */
+[data-theme="sammy"] .btn-connect-sim {
+  background: linear-gradient(135deg, #5a9e64 0%, #4a8454 100%);
+  border: 1.5px solid #5a9e64;
+  color: #f4fdf6;
+  box-shadow: 0 2px 8px rgba(90, 158, 100, 0.20);
+}
+[data-theme="sammy"] .btn-connect-sim:hover {
+  background: linear-gradient(135deg, #4a8454 0%, #3a7044 100%);
+  box-shadow: 0 6px 18px rgba(90, 158, 100, 0.32);
+}
+
+/* --------------- input fields & selects --------------- */
+[data-theme="sammy"] .field-row input,
+[data-theme="sammy"] .field-row select {
+  background: #fef9f0;
+  border: 1px solid #d4b080;
+  color: var(--text-primary);
+}
+
+/* --------------- theme picker styling --------------- */
+[data-theme="sammy"] .theme-picker-select {
+  background: #fef9f0;
+  border: 1px solid #c8874a;
+  color: #3a2210;
+}
+
+/* --------------- gentle glow on the dashboard card --------------- */
+[data-theme="sammy"] .dashboard-container {
+  box-shadow: 0 10px 40px rgba(200, 117, 51, 0.10), 0 4px 14px rgba(90, 50, 10, 0.06);
+}
+
+/* --------------- memorial footer badge --------------- */
+/* A small, respectful "In memory of Sammy 🐾" text at the
+   bottom of the page, visible only when this theme is active. */
+[data-theme="sammy"] body::after {
+  content: "In loving memory of Sammy who passed away during development. Rest in peace my beloved companion. -Apr 06 2026. 🐾";
+  display: block;
+  text-align: center;
+  padding: 18px 0 14px;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b0845a;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
 }

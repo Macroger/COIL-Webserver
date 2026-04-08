@@ -11,6 +11,9 @@
 # - re-runs CMake configure into `build/`
 # - builds using parallel jobs (defaults to number of CPU cores)
 
+echo "Interpreter: $0"
+ps -p $$ -o comm=
+
 
 set -euo pipefail
 
@@ -29,9 +32,24 @@ done
 
 if [[ $FULL -eq 1 ]]; then
 	echo "Performing full rebuild: removing build/"
-	rm -rf ./build/
+	if ! rm -rf ./build/ 2>/dev/null; then
+		echo "Permission denied removing build/ — fixing ownership with sudo..."
+		sudo chown -R "$(id -u):$(id -g)" ./build/
+		rm -rf ./build/
+	fi
 else
 	echo "Performing incremental build (preserves build/). Use --full to force clean rebuild."
+fi
+
+# Ensure external dependencies are present; install them if any are missing.
+MISSING_DEPS=0
+[[ ! -d external/asio ]]   && MISSING_DEPS=1
+[[ ! -d external/crow ]]   && MISSING_DEPS=1
+[[ ! -d external/httplib ]] && MISSING_DEPS=1
+
+if [[ $MISSING_DEPS -eq 1 ]]; then
+	echo "One or more dependencies missing in external/ — running install_deps.sh..."
+	bash install_scripts/install_deps.sh --no-boost
 fi
 
 # Configure the project into the build directory

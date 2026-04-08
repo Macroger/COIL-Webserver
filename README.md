@@ -18,6 +18,65 @@ A modular C++ webserver project for the COIL (Collaborative Online Integrated Le
 - `CMakeLists.txt` — Project build configuration
 - `run-server.sh` — Linux shell script to run the server
 
+## Docker (recommended)
+The Dockerfile handles all dependencies automatically — no manual setup required.
+
+```bash
+docker build -t coil-webserver .
+docker run -p 30333:30333 coil-webserver
+```
+
+The container clones Crow, ASIO, and cpp-httplib at build time, installs Boost via apt, then compiles and runs the server.
+
+## Local Build
+
+### Installing Dependencies
+Before building locally for the first time, run the install script from the project root:
+
+```bash
+./install_scripts/install_deps.sh
+```
+
+The script installs everything the project needs to build:
+
+| Dependency | What the script does |
+|---|---|
+| **Crow** | Clones `CrowCpp/Crow` into `external/crow` |
+| **ASIO** | Clones `chriskohlhoff/asio` into `external/asio` |
+| **cpp-httplib** | Clones `yhirose/cpp-httplib` into `external/httplib` |
+| **Boost** | Installs via apt (as root) or builds locally from source into `external/boost` |
+| **CMake 3.20+** | Checks installed version; installs via apt or Kitware's official installer if missing/outdated |
+
+Individual components can be skipped:
+
+```bash
+./install_scripts/install_deps.sh --no-boost      # skip Boost (if already installed system-wide)
+./install_scripts/install_deps.sh --no-asio        # skip ASIO
+./install_scripts/install_deps.sh --no-crow        # skip Crow
+./install_scripts/install_deps.sh --boost-version 1.85.0  # specify a Boost version
+```
+
+### Building
+Use the provided rebuild script from the project root:
+
+```bash
+./rebuild-server.sh            # incremental build (fast, preserves build/)
+./rebuild-server.sh --full     # clean rebuild (removes build/ and reconfigures)
+JOBS=4 ./rebuild-server.sh     # override parallel job count
+```
+
+The executable (`COIL_WEBSERVER`) will be placed in the project root after a successful build.
+
+Alternatively, build manually:
+1. `cmake -B build -S .`
+2. `cmake --build build`
+
+### Running
+```bash
+./COIL_WEBSERVER
+```
+
+
 ## Building
 1. Create and enter the build directory:
     - `mkdir build`

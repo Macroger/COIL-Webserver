@@ -154,7 +154,8 @@ class CommandHistory {
         }
 
         // Render entries oldest-first so newest appear at the bottom
-        this.history.reverse().forEach(entry => {
+        // Use slice() to avoid mutating the stored array in-place
+        this.history.slice().reverse().forEach(entry => {
             const logEntry = this.createLogEntry(entry);
             this.logElement.appendChild(logEntry);
         });

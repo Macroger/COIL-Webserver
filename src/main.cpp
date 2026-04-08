@@ -484,7 +484,7 @@ int main()
 
 	// POST /robot/connect - Configure and connect to robot or relay server
 	CROW_ROUTE(app, "/robot/connect/<string>/<int>/<string>").methods("POST"_method)
-	([&socketMgr, &socketMutex, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
+	([&socketMgr, &socketMutex, &pktCounter, &relayMode, &relayHost, &relayPort](const crow::request& req, crow::response& res, std::string ip, int port, std::string modeStr)
 	{
 		// Relay mode: store PC3 address, verify it is reachable, skip socket setup
 		if (modeStr == "relay")
@@ -501,6 +501,7 @@ int main()
 				relayHost = ip;
 				relayPort = port;
 				socketMgr = nullptr;
+				pktCounter = 0;
 
 				response["status"]    = "success";
 				response["message"]   = "Relay connected to " + ip + ":" + std::to_string(port);
@@ -543,6 +544,8 @@ int main()
 
 			if (connType == coil::protocol::ConnectionType::TCP)
 				socketMgr->ConnectTCP();
+
+			pktCounter = 0;
 
 			auto response = crow::json::wvalue();
 			response["status"]    = "success";
@@ -602,38 +605,61 @@ int main()
 		response["message"] = "Disconnected from robot";
 		response["timestamp"] = static_cast<long long>(std::time(nullptr));
 
+		// Parse optional skip_sleep flag from request body
+		bool skipSleep = false;
+		if (!req.body.empty())
+		{
+			auto body = crow::json::load(req.body);
+			if (body && body.has("skip_sleep"))
+			{
+				skipSleep = body["skip_sleep"].b();
+			}
+		}
+
 		try
 		{
 			std::lock_guard<std::mutex> lock(socketMutex);
 			if (socketMgr) 
 			{
-				// Send a SLEEP packet before disconnecting so the robot enters sleep mode cleanly
-				coil::protocol::PktDef sleepPkt;
-				sleepPkt.SetPktCount(++pktCounter);
-				sleepPkt.SetCmd(coil::protocol::CmdType::SLEEP);
-				socketMgr->SendData(sleepPkt.GenPacket(), sleepPkt.GetLength());
-
-				// Wait for the robot's acknowledgement of the SLEEP command
-				char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
-				int sleepBytes = socketMgr->GetData(recvBuf);
-
-				// Parse the ACK and surface it in the response so the frontend can log it
-				if (sleepBytes > 0)
+				if (!skipSleep)
 				{
-					coil::protocol::PktDef sleepResp(recvBuf, sleepBytes);
-					bool sleepAck = sleepResp.GetAck();
-					response["sleep_ack"]      = sleepAck;
-					response["sleep_response"] = sleepAck ? "ACK" : "NACK";
-					response["sleep_pkt_count"] = pktCounter;
+					// Send a SLEEP packet before disconnecting so the robot enters sleep mode cleanly
+					coil::protocol::PktDef sleepPkt;
+					sleepPkt.SetPktCount(++pktCounter);
+					sleepPkt.SetCmd(coil::protocol::CmdType::SLEEP);
+					socketMgr->SendData(sleepPkt.GenPacket(), sleepPkt.GetLength());
+
+					// Wait for the robot's acknowledgement of the SLEEP command
+					char recvBuf[coil::protocol::constants::MAX_PKT_SIZE] = {0};
+					int sleepBytes = socketMgr->GetData(recvBuf);
+
+					// Parse the ACK and surface it in the response so the frontend can log it
+					if (sleepBytes > 0)
+					{
+						coil::protocol::PktDef sleepResp(recvBuf, sleepBytes);
+						bool sleepAck = sleepResp.GetAck();
+						response["sleep_ack"]       = sleepAck;
+						response["sleep_response"]  = sleepAck ? "ACK" : "NACK";
+						response["sleep_pkt_count"] = pktCounter;
+					}
+					else
+					{
+						response["sleep_ack"]       = false;
+						response["sleep_response"]  = "TIMEOUT";
+						response["sleep_pkt_count"] = pktCounter;
+					}
 				}
 				else
 				{
-					response["sleep_ack"]      = false;
-					response["sleep_response"] = "TIMEOUT";
+					response["sleep_ack"]       = false;
+					response["sleep_response"]  = "SKIPPED";
 					response["sleep_pkt_count"] = pktCounter;
 				}
 
-				socketMgr->DisconnectTCP();
+				if (socketMgr->GetConnectionType() == coil::protocol::ConnectionType::UDP)
+					socketMgr->InvalidateSockets();
+				else
+					socketMgr->DisconnectTCP();
 			}
 			else 
 			{

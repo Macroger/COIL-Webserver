@@ -17,13 +17,14 @@
                 <div class="theme-picker-wrap">
                     <span class="theme-label">Theme: </span>
                     <select id="themePicker" class="theme-picker-select" title="Select theme">
-                        <option value="default">Default</option>
+                        <option value="sammy">Sammy's Theme 🐾</option>
                         <option value="angelic">Angelic</option>
                         <option value="demonic">Demonic</option>
                         <option value="industrial">Industrial</option>
                         <option value="cyberpunk">Cyberpunk</option>
                         <option value="coolgray">Cool Gray</option>
                         <option value="warmcream">Warm Cream</option>
+                        <option value="default">Cobalt Command</option>
                     </select>
                 </div>
             </div>
@@ -137,6 +138,7 @@
                     <div class="telemetry-header" style="display:flex;justify-content:space-between;align-items:center">
                         <h3 style="margin:0">Raw Message Console</h3>
                         <div>
+                            <button id="btnDownloadConsole" class="btn-clear-console btn-clear-history">Download</button>
                             <button id="btnClearConsole" class="btn-clear-console btn-clear-history">Clear</button>
                             <label class="console-auto-scroll" style="margin-left:8px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
                         </div>
@@ -155,6 +157,7 @@
             <!-- Control Panel (Left) -->
             <div class="control-panel">
                 <h2>Control Panel</h2>
+                <div id="processingMessage" class="processing-message" aria-live="polite"></div>
                 <div class="directional-controls">
                     <h3>Movement</h3>
                     <div class="arrow-pad">
@@ -182,8 +185,8 @@
                     </div>
                 </div>
                 
-                <div class="processing-area">
-                    <div id="processingMessage" class="processing-message hidden" aria-live="polite"></div>
+                <div class="sleep-control">
+                    <button id="btnSleep" class="btn btn-sleep" title="Send Sleep Command to Robot">💤 Sleep Robot</button>
                 </div>
 
                 

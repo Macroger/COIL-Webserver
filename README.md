@@ -77,3 +77,35 @@ Alternatively, build manually:
 ```
 
 
+## Building
+1. Create and enter the build directory:
+    - `mkdir build`
+    - `cd build`
+2. Generate build files:
+    - `cmake ..`
+3. Build the project:
+    - `cmake --build .`
+4. The executable (`COIL_WEBSERVER` or `COIL_WEBSERVER.exe`) will be in the project root.
+
+## Running
+- On Linux: `./COIL_WEBSERVER`
+- Or use `run-server.sh` (Linux only)
+
+## Requirements
+- C++20 compatible compiler (GCC, Clang, MSVC)
+- CMake 3.20+
+- Boost (system, filesystem)
+- Threads library
+
+## License
+This project is provided under the MIT License. See LICENSE for details.
+
+## Credits
+- [Crow](https://github.com/CrowCpp/crow)
+- [ASIO](https://think-async.com/)
+
+## Contributors
+Ryan Hackbart
+Matt Schatz
+Leanne Kidder
+Hayden Puthenparambil Biju
